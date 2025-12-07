@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Router,
   Thermometer,
   Fan,
   ArrowDown,
@@ -10,6 +9,7 @@ import {
   Plus,
   Phone
 } from 'lucide-react';
+import logoUltra from '../../icons/logo_ultra.svg';
 import { StatusBadge } from '../ui/Badge';
 import { formatSpeed, formatTemperature } from '../../utils/constants';
 import type { SystemInfo, ConnectionStatus } from '../../types/api';
@@ -59,8 +59,8 @@ export const Header: React.FC<HeaderProps> = ({ systemInfo, connectionStatus }) 
     <header className="flex flex-col md:flex-row items-center justify-between p-4 bg-[#111111] border-b border-gray-800 gap-4">
       {/* Box identifier */}
       <div className="flex items-center gap-3 bg-[#1a1a1a] px-4 py-2 rounded-lg border border-gray-700">
-        <Router className="text-gray-400" size={20} />
-        <span className="font-semibold text-gray-200">{boxName}</span>
+        <img src={logoUltra} alt="Freebox Ultra" className="w-7 h-7 flex-shrink-0" />
+        <span className="font-semibold text-gray-200 leading-none">{boxName}</span>
       </div>
 
       {/* Status badges */}
