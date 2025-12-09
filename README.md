@@ -30,6 +30,8 @@
 | **Freebox Ultra** | Complet | Oui | Oui |
 | **Freebox Delta** | Complet | Oui | Non |
 | **Freebox Pop** | Complet | Non | Non |
+| **Freebox Mini 4K** | Test | Non | Non |
+| **Freebox Revolution** | Test | Non | Non |
 
 ## Apercu
 
@@ -65,6 +67,31 @@ Docker est la methode recommandee pour deployer sur NAS (Synology, QNAP), Raspbe
 - Docker et Docker Compose installes
 - Acces au meme reseau local que la Freebox
 
+### Deux methodes de deploiement
+
+#### Production (Image pre-construite - Recommande)
+
+Utilise l'image officielle depuis GitHub Container Registry :
+
+```bash
+# Lancer le conteneur avec l'image pre-construite
+docker-compose up -d
+```
+
+**Avantages :**
+- Demarrage ultra-rapide (pas de compilation)
+- Image testee et validee
+- Mises a jour automatiques avec `docker-compose pull`
+
+#### Developpement local (Build depuis les sources)
+
+Pour tester des modifications ou contribuer :
+
+```bash
+# Build et lancement local
+docker-compose -f docker-compose.local.yml up -d --build
+```
+
 ### Lancement rapide
 
 ```bash
@@ -72,8 +99,11 @@ Docker est la methode recommandee pour deployer sur NAS (Synology, QNAP), Raspbe
 git clone https://github.com/HGHugo/FreeboxOS-Ultra-Dashboard.git
 cd FreeboxOS-Ultra-Dashboard
 
-# Lancer le conteneur
+# Lancer avec l'image pre-construite (PRODUCTION)
 docker-compose up -d
+
+# OU build local (DEVELOPPEMENT)
+docker-compose -f docker-compose.local.yml up -d --build
 ```
 
 Le dashboard sera accessible sur :
@@ -97,6 +127,17 @@ docker-compose up -d
 |----------|--------|-------------|
 | `DASHBOARD_PORT` | `7505` | Port d'acces au dashboard |
 | `FREEBOX_HOST` | `mafreebox.freebox.fr` | Hostname de la Freebox |
+
+### Mise a jour Docker
+
+```bash
+# Production (image pre-construite)
+docker-compose pull
+docker-compose up -d
+
+# Developpement local (rebuild)
+docker-compose -f docker-compose.local.yml up -d --build
+```
 
 ### Persistance du token
 

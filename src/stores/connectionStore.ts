@@ -91,7 +91,9 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
             upload: Math.round(upload / 1024)
           };
         });
-        console.log('[ConnectionStore] Processed history:', extendedHistory.length, 'points', 'sample:', extendedHistory[0]);
+        console.log('[ConnectionStore] Processed history:', extendedHistory.length, 'points');
+        console.log('[ConnectionStore] First 3 data points:', extendedHistory.slice(0, 3));
+        console.log('[ConnectionStore] Stats - avgDown:', Math.round(extendedHistory.reduce((sum, p) => sum + p.download, 0) / extendedHistory.length), 'KB/s');
         set({ extendedHistory, isLoading: false });
       } else {
         console.log('[ConnectionStore] No data in response, success:', response.success, 'result:', response.result);
@@ -118,28 +120,53 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     try {
       const now = Math.floor(Date.now() / 1000);
       const start = now - duration;
+      console.log('[ConnectionStore] Fetching temperature history from', start, 'to', now);
       const response = await api.get<RrdResponse>(
         `${API_ROUTES.CONNECTION_TEMP_HISTORY}?start=${start}&end=${now}`
       );
+      console.log('[ConnectionStore] Temperature response:', response);
 
       if (response.success && response.result && response.result.data) {
-        const temperatureHistory = response.result.data.map((point: Record<string, unknown>) => ({
-          time: new Date((point.time as number) * 1000).toLocaleTimeString('fr-FR', {
-            hour: '2-digit',
-            minute: '2-digit'
-          }),
-          cpuM: point.temp_cpum as number | undefined,
-          cpuB: point.temp_cpub as number | undefined,
-          sw: point.temp_sw as number | undefined,
-          cpu0: point.temp_cpu0 as number | undefined,
-          cpu1: point.temp_cpu1 as number | undefined,
-          cpu2: point.temp_cpu2 as number | undefined,
-          cpu3: point.temp_cpu3 as number | undefined
-        }));
+        console.log('[ConnectionStore] Temperature data points:', response.result.data.length, 'first:', JSON.stringify(response.result.data[0]));
+        // RRD temp database fields vary by model:
+        // Ultra v9: temp_cpu0, temp_cpu1, temp_cpu2, temp_cpu3
+        // Other models: cpum, cpub, sw
+        const temperatureHistory = response.result.data.map((point: Record<string, unknown>) => {
+          // Ultra v9: average of 4 CPU cores
+          const hasUltraTemp = point.temp_cpu0 != null;
+          let cpuM: number | undefined;
+
+          if (hasUltraTemp) {
+            // Ultra: average of temp_cpu0-3
+            const temps = [
+              point.temp_cpu0 as number,
+              point.temp_cpu1 as number,
+              point.temp_cpu2 as number,
+              point.temp_cpu3 as number
+            ].filter(t => t != null);
+            cpuM = temps.length > 0 ? Math.round(temps.reduce((a, b) => a + b, 0) / temps.length) : undefined;
+          } else {
+            // Other models: use cpum
+            cpuM = point.cpum as number | undefined;
+          }
+
+          return {
+            time: new Date((point.time as number) * 1000).toLocaleTimeString('fr-FR', {
+              hour: '2-digit',
+              minute: '2-digit'
+            }),
+            cpuM,  // CPU main or average of CPU cores
+            cpuB: point.cpub as number | undefined,  // CPU box (other models)
+            sw: point.sw as number | undefined       // Switch (other models)
+          };
+        });
+        console.log('[ConnectionStore] Processed temperature:', temperatureHistory.length, 'points, sample:', temperatureHistory[0]);
         set({ temperatureHistory });
+      } else {
+        console.log('[ConnectionStore] No temperature data, success:', response.success, 'result:', response.result);
       }
-    } catch {
-      // Temperature history fetch failed silently
+    } catch (err) {
+      console.error('[ConnectionStore] Temperature fetch error:', err);
     }
   }
 }));

@@ -6,17 +6,19 @@ const router = Router();
 
 // GET /api/fs/list - List files in directory
 router.get('/list', asyncHandler(async (req, res) => {
-  const path = req.query.path as string || '/';
+  const encodedPath = req.query.path as string || '/';
+  const path = decodeURIComponent(encodedPath);
   const result = await freeboxApi.listFiles(path);
   res.json(result);
 }));
 
 // GET /api/fs/info - Get file info
 router.get('/info', asyncHandler(async (req, res) => {
-  const path = req.query.path as string;
-  if (!path) {
+  const encodedPath = req.query.path as string;
+  if (!encodedPath) {
     return res.status(400).json({ success: false, error: { message: 'Path required' } });
   }
+  const path = decodeURIComponent(encodedPath);
   const result = await freeboxApi.getFileInfo(path);
   res.json(result);
 }));
@@ -24,35 +26,48 @@ router.get('/info', asyncHandler(async (req, res) => {
 // POST /api/fs/mkdir - Create directory
 router.post('/mkdir', asyncHandler(async (req, res) => {
   const { parent, dirname } = req.body;
-  const result = await freeboxApi.createDirectory(parent, dirname);
+  // parent may be URL-encoded, decode it
+  const decodedParent = parent ? decodeURIComponent(parent) : parent;
+  const result = await freeboxApi.createDirectory(decodedParent, dirname);
   res.json(result);
 }));
 
 // POST /api/fs/rename - Rename file/folder
 router.post('/rename', asyncHandler(async (req, res) => {
   const { src, dst } = req.body;
-  const result = await freeboxApi.renameFile(src, dst);
+  // Decode URL-encoded paths
+  const decodedSrc = src ? decodeURIComponent(src) : src;
+  const decodedDst = dst ? decodeURIComponent(dst) : dst;
+  const result = await freeboxApi.renameFile(decodedSrc, decodedDst);
   res.json(result);
 }));
 
 // POST /api/fs/remove - Delete files
 router.post('/remove', asyncHandler(async (req, res) => {
   const { files } = req.body;
-  const result = await freeboxApi.removeFiles(files);
+  // Decode URL-encoded file paths
+  const decodedFiles = files ? files.map((f: string) => decodeURIComponent(f)) : files;
+  const result = await freeboxApi.removeFiles(decodedFiles);
   res.json(result);
 }));
 
 // POST /api/fs/copy - Copy files
 router.post('/copy', asyncHandler(async (req, res) => {
   const { files, dst, mode } = req.body;
-  const result = await freeboxApi.copyFiles(files, dst, mode);
+  // Decode URL-encoded paths
+  const decodedFiles = files ? files.map((f: string) => decodeURIComponent(f)) : files;
+  const decodedDst = dst ? decodeURIComponent(dst) : dst;
+  const result = await freeboxApi.copyFiles(decodedFiles, decodedDst, mode);
   res.json(result);
 }));
 
 // POST /api/fs/move - Move files
 router.post('/move', asyncHandler(async (req, res) => {
   const { files, dst, mode } = req.body;
-  const result = await freeboxApi.moveFiles(files, dst, mode);
+  // Decode URL-encoded paths
+  const decodedFiles = files ? files.map((f: string) => decodeURIComponent(f)) : files;
+  const decodedDst = dst ? decodeURIComponent(dst) : dst;
+  const result = await freeboxApi.moveFiles(decodedFiles, decodedDst, mode);
   res.json(result);
 }));
 

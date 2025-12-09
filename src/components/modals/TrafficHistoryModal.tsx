@@ -13,16 +13,13 @@ import {
   Legend
 } from 'recharts';
 import type { NetworkStat, SystemInfo, ConnectionStatus } from '../../types';
+import { formatSpeed } from '../../utils/constants';
 
 interface TemperatureStat {
   time: string;
-  cpuM?: number;
-  cpuB?: number;
-  sw?: number;
-  cpu0?: number;
-  cpu1?: number;
-  cpu2?: number;
-  cpu3?: number;
+  cpuM?: number;  // temp_cpum - CPU main
+  cpuB?: number;  // temp_cpub - CPU box
+  sw?: number;    // temp_sw - Switch
 }
 
 interface TrafficHistoryModalProps {
@@ -53,7 +50,8 @@ export const TrafficHistoryModal: React.FC<TrafficHistoryModalProps> = ({
     if (isOpen) {
       onFetchHistory?.();
     }
-  }, [isOpen, onFetchHistory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]); // Only trigger on isOpen change, not onFetchHistory
 
   // Generate mock data if not provided
   const chartData = useMemo(() => {
@@ -75,19 +73,20 @@ export const TrafficHistoryModal: React.FC<TrafficHistoryModalProps> = ({
     if (temperatureData && temperatureData.length > 0) {
       return temperatureData.map(t => ({
         time: t.time,
-        cpu: t.cpu0 ?? t.cpuM ?? 0,
-        cpu2: t.cpu1 ?? t.cpuB ?? undefined,
-        cpu3: t.cpu2 ?? undefined,
-        cpu4: t.cpu3 ?? undefined,
-        switch: t.sw ?? undefined
+        cpuM: t.cpuM ?? 0,       // CPU average (all cores)
+        sw: t.sw ?? undefined     // Switch (if available)
       }));
     }
     return [];
   }, [temperatureData]);
 
-  // Get CPU temperature (handles both old and new Freebox models)
+  // Get CPU temperature (works for all Freebox models)
+  // Ultra v9: Uses temp_cpu0-3 (4 CPU cores), returns average
+  // Other models: Use temp_cpum, temp_cpub, temp_sw (legacy fields)
   const getCpuTemp = (): number | null => {
     if (!systemInfo) return null;
+
+    // Ultra v9: average of 4 CPU cores
     if (systemInfo.temp_cpu0 != null) {
       const temps = [systemInfo.temp_cpu0, systemInfo.temp_cpu1, systemInfo.temp_cpu2, systemInfo.temp_cpu3]
         .filter(t => t != null) as number[];
@@ -95,8 +94,11 @@ export const TrafficHistoryModal: React.FC<TrafficHistoryModalProps> = ({
         return Math.round(temps.reduce((a, b) => a + b, 0) / temps.length);
       }
     }
-    if (systemInfo.temp_cpum != null) return systemInfo.temp_cpum;
-    if (systemInfo.temp_cpub != null) return systemInfo.temp_cpub;
+
+    // Other models: legacy fields
+    if (systemInfo.temp_cpum != null && systemInfo.temp_cpum !== 0) return systemInfo.temp_cpum;
+    if (systemInfo.temp_cpub != null && systemInfo.temp_cpub !== 0) return systemInfo.temp_cpub;
+    if (systemInfo.temp_sw != null && systemInfo.temp_sw !== 0) return systemInfo.temp_sw;
     return null;
   };
 
@@ -109,11 +111,11 @@ export const TrafficHistoryModal: React.FC<TrafficHistoryModalProps> = ({
     return `${minutes}m`;
   };
 
-  // Use decimal (1000) for network data to match Freebox OS display
+  // Format bytes to French units (o, Ko, Mo, Go, To)
   const formatBytes = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
+    if (bytes === 0) return '0 o';
     const k = 1000; // Decimal system (network convention) to match Freebox OS
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const sizes = ['o', 'Ko', 'Mo', 'Go', 'To'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
@@ -200,13 +202,13 @@ export const TrafficHistoryModal: React.FC<TrafficHistoryModalProps> = ({
                 <div className="bg-[#1a1a1a] rounded-xl p-4 border border-gray-800">
                   <div className="text-xs text-gray-500 mb-1">Débit descendant</div>
                   <div className="text-2xl font-bold text-blue-400">
-                    {connectionStatus ? formatBytes(connectionStatus.rate_down) + '/s' : '--'}
+                    {connectionStatus ? formatSpeed(connectionStatus.rate_down) : '--'}
                   </div>
                 </div>
                 <div className="bg-[#1a1a1a] rounded-xl p-4 border border-gray-800">
                   <div className="text-xs text-gray-500 mb-1">Débit montant</div>
                   <div className="text-2xl font-bold text-emerald-400">
-                    {connectionStatus ? formatBytes(connectionStatus.rate_up) + '/s' : '--'}
+                    {connectionStatus ? formatSpeed(connectionStatus.rate_up) : '--'}
                   </div>
                 </div>
                 <div className="bg-[#1a1a1a] rounded-xl p-4 border border-gray-800">
@@ -262,7 +264,14 @@ export const TrafficHistoryModal: React.FC<TrafficHistoryModalProps> = ({
                           color: '#fff',
                           borderRadius: '0.5rem'
                         }}
-                        itemStyle={{ color: '#fff' }}
+                        formatter={(value: number, _name: string, props: { dataKey: string }) => {
+                          const label = props.dataKey === 'download' ? 'Descendant' : 'Montant';
+                          const color = props.dataKey === 'download' ? '#3b82f6' : '#10b981';
+                          return [
+                            <span style={{ color }}>{value} KB/s</span>,
+                            label
+                          ];
+                        }}
                       />
                       <Legend wrapperStyle={{ paddingTop: '20px' }} />
                       <Area
@@ -293,14 +302,16 @@ export const TrafficHistoryModal: React.FC<TrafficHistoryModalProps> = ({
           {activeTab === 'temperature' && (
             <div className="space-y-6">
               {/* Current Temps */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="bg-[#1a1a1a] rounded-xl p-4 border border-gray-800">
-                  <div className="text-xs text-gray-500 mb-1">CPU (moyenne)</div>
+                  <div className="text-xs text-gray-500 mb-1">
+                    {systemInfo?.temp_cpu0 != null ? 'CPU (Moyenne)' : 'CPU Principal'}
+                  </div>
                   <div className={`text-2xl font-bold ${cpuTemp && cpuTemp > 70 ? 'text-red-400' : cpuTemp && cpuTemp > 50 ? 'text-orange-400' : 'text-emerald-400'}`}>
                     {cpuTemp ? `${cpuTemp}°C` : '--'}
                   </div>
                 </div>
-                {systemInfo?.temp_sw != null && (
+                {systemInfo?.temp_sw != null && systemInfo.temp_sw > 0 && (
                   <div className="bg-[#1a1a1a] rounded-xl p-4 border border-gray-800">
                     <div className="text-xs text-gray-500 mb-1">Switch</div>
                     <div className={`text-2xl font-bold ${systemInfo.temp_sw > 70 ? 'text-red-400' : systemInfo.temp_sw > 50 ? 'text-orange-400' : 'text-emerald-400'}`}>
@@ -356,9 +367,16 @@ export const TrafficHistoryModal: React.FC<TrafficHistoryModalProps> = ({
                           itemStyle={{ color: '#fff' }}
                         />
                         <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                        <Line type="monotone" dataKey="cpu" name="CPU" stroke="#f97316" strokeWidth={2} dot={false} />
-                        {tempChartData[0]?.switch !== undefined && (
-                          <Line type="monotone" dataKey="switch" name="Switch" stroke="#06b6d4" strokeWidth={2} dot={false} />
+                        <Line
+                          type="monotone"
+                          dataKey="cpuM"
+                          name={systemInfo?.temp_cpu0 != null ? 'CPU (Moyenne)' : 'CPU Principal'}
+                          stroke="#f97316"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                        {tempChartData.some(d => d.sw && d.sw > 0) && (
+                          <Line type="monotone" dataKey="sw" name="Switch" stroke="#06b6d4" strokeWidth={2} dot={false} />
                         )}
                       </LineChart>
                     </ResponsiveContainer>

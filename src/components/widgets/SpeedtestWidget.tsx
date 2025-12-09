@@ -49,8 +49,12 @@ export const SpeedtestWidget: React.FC = () => {
       const pingResponse = await api.get<{ latency: number; jitter: number; packetLoss: number }>(
         '/api/speedtest/ping?count=5'
       );
+      console.log('[SpeedtestWidget] Ping response:', pingResponse);
       if (pingResponse.success && pingResponse.result) {
+        console.log('[SpeedtestWidget] Setting ping result:', pingResponse.result);
         setPingResult(pingResponse.result);
+      } else {
+        console.log('[SpeedtestWidget] Ping failed:', pingResponse.error);
       }
     } catch (err) {
       console.error('[Speedtest] Error:', err);
@@ -124,11 +128,11 @@ export const SpeedtestWidget: React.FC = () => {
       <div className="grid grid-cols-2 gap-4">
         {/* Download */}
         <div className="bg-[#151515] flex flex-col p-4 rounded-lg border border-gray-800">
-          <div className="flex flex-grow items-start justify-center gap-2 text-xs text-gray-500 mb-2">
+          <div className="flex items-center justify-center gap-2 text-xs text-gray-500 mb-2">
             <ArrowDown size={12} className="text-blue-500" />
             Descendant max
           </div>
-          <div className="flex items-baseline gap-1">
+          <div className="flex items-baseline justify-center gap-1">
             <span className="text-2xl font-bold text-white">{downloadMax.value}</span>
             <span className="text-sm text-gray-400">{downloadMax.unit}</span>
           </div>
@@ -136,11 +140,11 @@ export const SpeedtestWidget: React.FC = () => {
 
         {/* Upload */}
         <div className="bg-[#151515] flex flex-col p-4 rounded-lg border border-gray-800">
-          <div className="flex flex-grow items-start justify-center gap-2 text-xs text-gray-500 mb-2">
+          <div className="flex items-center justify-center gap-2 text-xs text-gray-500 mb-2">
             <ArrowUp size={12} className="text-emerald-500" />
             Montant max
           </div>
-          <div className="flex items-baseline gap-1">
+          <div className="flex items-baseline justify-center gap-1">
             <span className="text-2xl font-bold text-white">{uploadMax.value}</span>
             <span className="text-sm text-gray-400">{uploadMax.unit}</span>
           </div>
@@ -152,21 +156,29 @@ export const SpeedtestWidget: React.FC = () => {
         <div className="bg-[#151515] p-3 rounded-lg border border-gray-800 text-center">
           <div className="text-xs text-gray-500 mb-1">Ping</div>
           <div className="text-lg font-bold text-white">
-            {pingResult?.latency ? `${pingResult.latency.toFixed(1)}` : '--'}
+            {pingResult?.latency != null ? `${pingResult.latency.toFixed(1)}` : '--'}
             <span className="text-xs text-gray-500 ml-1">ms</span>
           </div>
         </div>
         <div className="bg-[#151515] p-3 rounded-lg border border-gray-800 text-center">
           <div className="text-xs text-gray-500 mb-1">Gigue</div>
           <div className="text-lg font-bold text-white">
-            {pingResult?.jitter ? `${pingResult.jitter.toFixed(1)}` : '--'}
-            <span className="text-xs text-gray-500 ml-1">ms</span>
+            {pingResult?.jitter != null ? (
+              pingResult.jitter === 0 ? (
+                <span className="text-sm text-gray-500">N/A</span>
+              ) : (
+                `${pingResult.jitter.toFixed(1)}`
+              )
+            ) : '--'}
+            {pingResult?.jitter != null && pingResult.jitter !== 0 && (
+              <span className="text-xs text-gray-500 ml-1">ms</span>
+            )}
           </div>
         </div>
         <div className="bg-[#151515] p-3 rounded-lg border border-gray-800 text-center">
           <div className="text-xs text-gray-500 mb-1">Perte</div>
           <div className="text-lg font-bold text-white">
-            {pingResult ? `${pingResult.packetLoss}` : '--'}
+            {pingResult?.packetLoss != null ? `${pingResult.packetLoss}` : '--'}
             <span className="text-xs text-gray-500 ml-1">%</span>
           </div>
         </div>

@@ -30,19 +30,26 @@ interface HeaderProps {
   connectionStatus?: ConnectionStatus | null;
 }
 
-// Helper to get CPU temperature (works for both old and new Freebox models)
+// Helper to get CPU temperature (works for all Freebox models)
+// Ultra v9: Uses temp_cpu0-3 (4 CPU cores), returns average
+// Other models: Use temp_cpum, temp_cpub, temp_sw (legacy fields)
 const getCpuTemp = (info: SystemInfo | null | undefined): number | null => {
   if (!info) return null;
-  // Try v9+ temps first (average of available CPUs)
+
+  // Ultra v9: average of 4 CPU cores
   if (info.temp_cpu0 != null) {
-    const temps = [info.temp_cpu0, info.temp_cpu1, info.temp_cpu2, info.temp_cpu3].filter(t => t != null) as number[];
+    const temps = [info.temp_cpu0, info.temp_cpu1, info.temp_cpu2, info.temp_cpu3]
+      .filter(t => t != null) as number[];
     if (temps.length > 0) {
       return Math.round(temps.reduce((a, b) => a + b, 0) / temps.length);
     }
   }
-  // Fall back to older model temp
-  if (info.temp_cpum != null) return info.temp_cpum;
-  if (info.temp_cpub != null) return info.temp_cpub;
+
+  // Other models: legacy fields
+  if (info.temp_cpum != null && info.temp_cpum !== 0) return info.temp_cpum;
+  if (info.temp_cpub != null && info.temp_cpub !== 0) return info.temp_cpub;
+  if (info.temp_sw != null && info.temp_sw !== 0) return info.temp_sw;
+
   return null;
 };
 

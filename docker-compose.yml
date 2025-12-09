@@ -2,6 +2,10 @@
 # FreeboxOS Ultra Dashboard - Docker Compose
 # ===========================================
 #
+# Production deployment using pre-built image from GitHub Container Registry
+#
+# For local development (building from source), use docker-compose.local.yml instead
+#
 # Usage:
 #   docker-compose up -d
 #
@@ -15,9 +19,7 @@
 
 services:
   freebox-dashboard:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/hghugo/freeboxos-ultra-dashboard:latest
     container_name: freebox-dashboard
     restart: unless-stopped
 
@@ -49,7 +51,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 40s
 
     # Resource limits (optional)
     # deploy:

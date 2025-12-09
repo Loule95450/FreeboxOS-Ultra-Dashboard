@@ -27,22 +27,19 @@ RUN addgroup -g 1001 -S nodejs && \
 
 WORKDIR /app
 
+# Create data directory for persistent token storage
+RUN mkdir -p /app/data && chown -R freebox:nodejs /app/data
+
 # Copy package files and install dependencies (tsx needed for runtime)
-COPY package*.json ./
+COPY --chown=freebox:nodejs package*.json ./
 RUN npm ci && npm cache clean --force
 
 # Copy built frontend from builder
-COPY --from=builder /app/dist ./dist
+COPY --chown=freebox:nodejs --from=builder /app/dist ./dist
 
 # Copy backend source (TypeScript files - tsx runs them directly)
-COPY --from=builder /app/server ./server
-COPY --from=builder /app/tsconfig.json ./
-
-# Create data directory for persistent token storage
-RUN mkdir -p /app/data
-
-# Fix permissions - give freebox user ownership of everything
-RUN chown -R freebox:nodejs /app
+COPY --chown=freebox:nodejs --from=builder /app/server ./server
+COPY --chown=freebox:nodejs --from=builder /app/tsconfig.json ./
 
 # Environment variables with defaults
 ENV NODE_ENV=production

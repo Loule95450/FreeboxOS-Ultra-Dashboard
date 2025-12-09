@@ -18,7 +18,10 @@ import {
   Clock,
   Users,
   Share2,
-  ExternalLink
+  ExternalLink,
+  Plus,
+  Trash2,
+  Edit2
 } from 'lucide-react';
 import { api } from '../api/client';
 import { API_ROUTES } from '../utils/constants';
@@ -117,6 +120,22 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
     dns: string;
   } | null>(null);
 
+  // DHCP static leases
+  const [staticLeases, setStaticLeases] = useState<Array<{
+    id: string;
+    mac: string;
+    ip: string;
+    comment: string;
+    hostname?: string;
+  }>>([]);
+  const [showLeaseModal, setShowLeaseModal] = useState(false);
+  const [editingLease, setEditingLease] = useState<{
+    id?: string;
+    mac: string;
+    ip: string;
+    comment: string;
+  } | null>(null);
+
   // FTP settings
   const [ftpConfig, setFtpConfig] = useState<{
     enabled: boolean;
@@ -187,6 +206,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
           const response = await api.get<typeof dhcpConfig>(API_ROUTES.SETTINGS_DHCP);
           if (response.success && response.result) {
             setDhcpConfig(response.result);
+          }
+          // Fetch static leases
+          const leasesResponse = await api.get<typeof staticLeases>(API_ROUTES.DHCP_STATIC_LEASES);
+          if (leasesResponse.success && leasesResponse.result) {
+            setStaticLeases(Array.isArray(leasesResponse.result) ? leasesResponse.result : []);
           }
           break;
         }
@@ -295,6 +319,73 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
       }
     } catch {
       setError('Erreur lors de la sauvegarde');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // DHCP Static Leases management
+  const addStaticLease = () => {
+    setEditingLease({ mac: '', ip: '', comment: '' });
+    setShowLeaseModal(true);
+  };
+
+  const editStaticLease = (lease: typeof staticLeases[0]) => {
+    setEditingLease({ id: lease.id, mac: lease.mac, ip: lease.ip, comment: lease.comment });
+    setShowLeaseModal(true);
+  };
+
+  const saveStaticLease = async () => {
+    if (!editingLease) return;
+    setIsLoading(true);
+    try {
+      let response;
+      if (editingLease.id) {
+        // Update existing lease
+        response = await api.put(`${API_ROUTES.DHCP_STATIC_LEASES}/${editingLease.id}`, {
+          mac: editingLease.mac,
+          ip: editingLease.ip,
+          comment: editingLease.comment
+        });
+      } else {
+        // Create new lease
+        response = await api.post(API_ROUTES.DHCP_STATIC_LEASES, {
+          mac: editingLease.mac,
+          ip: editingLease.ip,
+          comment: editingLease.comment
+        });
+      }
+
+      if (response.success) {
+        showSuccess(editingLease.id ? 'Bail statique modifié' : 'Bail statique ajouté');
+        setShowLeaseModal(false);
+        setEditingLease(null);
+        // Refresh leases
+        fetchSettings();
+      } else {
+        setError(response.error?.message || 'Erreur lors de la sauvegarde');
+      }
+    } catch {
+      setError('Erreur lors de la sauvegarde');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const deleteStaticLease = async (id: string) => {
+    if (!confirm('Voulez-vous vraiment supprimer ce bail statique ?')) return;
+    setIsLoading(true);
+    try {
+      const response = await api.delete(`${API_ROUTES.DHCP_STATIC_LEASES}/${id}`);
+      if (response.success) {
+        showSuccess('Bail statique supprimé');
+        // Refresh leases
+        fetchSettings();
+      } else {
+        setError(response.error?.message || 'Erreur lors de la suppression');
+      }
+    } catch {
+      setError('Erreur lors de la suppression');
     } finally {
       setIsLoading(false);
     }
@@ -455,7 +546,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
               </SettingRow>
               <SettingRow
                 label="Port d'accès distant"
-                description="Port HTTPS pour l'accès distant"
+                description="Port HTTP pour l'accès distant à la Freebox"
               >
                 <input
                   type="number"
@@ -583,6 +674,73 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
               <Save size={16} />
               Enregistrer
             </button>
+
+            {/* Static Leases Section */}
+            <div className="bg-[#121212] rounded-xl border border-gray-800 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-[#0f0f0f]">
+                <div className="flex items-center gap-3">
+                  <Network size={18} className="text-gray-400" />
+                  <h3 className="font-medium text-white">Baux DHCP statiques</h3>
+                  <span className="text-xs text-gray-500">({staticLeases.length})</span>
+                </div>
+                <button
+                  onClick={addStaticLease}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                >
+                  <Plus size={14} />
+                  Ajouter
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                {staticLeases.length > 0 ? (
+                  <table className="w-full">
+                    <thead className="bg-[#0a0a0a] border-b border-gray-800">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Adresse MAC</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">IP</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Commentaire</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Hostname</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      {staticLeases.map((lease) => (
+                        <tr key={lease.id} className="hover:bg-[#0a0a0a] transition-colors">
+                          <td className="px-4 py-3 text-sm font-mono text-white">{lease.mac}</td>
+                          <td className="px-4 py-3 text-sm font-mono text-white">{lease.ip}</td>
+                          <td className="px-4 py-3 text-sm text-gray-300">{lease.comment || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-400">{lease.hostname || '-'}</td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => editStaticLease(lease)}
+                                className="p-1.5 hover:bg-gray-800 rounded text-blue-400 hover:text-blue-300 transition-colors"
+                                title="Modifier"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button
+                                onClick={() => deleteStaticLease(lease.id)}
+                                className="p-1.5 hover:bg-gray-800 rounded text-red-400 hover:text-red-300 transition-colors"
+                                title="Supprimer"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="px-4 py-8 text-center text-gray-500">
+                    <Network size={32} className="mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Aucun bail statique configuré</p>
+                    <p className="text-xs mt-1">Cliquez sur "Ajouter" pour en créer un</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -898,6 +1056,98 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
         isOpen={showVpnModal}
         onClose={() => setShowVpnModal(false)}
       />
+
+      {/* DHCP Static Lease Modal */}
+      {showLeaseModal && editingLease && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#151515] w-full max-w-md rounded-xl border border-gray-800 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-800">
+              <h3 className="text-lg font-semibold text-white">
+                {editingLease.id ? 'Modifier' : 'Ajouter'} un bail statique
+              </h3>
+              <button
+                onClick={() => {
+                  setShowLeaseModal(false);
+                  setEditingLease(null);
+                }}
+                className="p-2 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors"
+              >
+                <ChevronLeft size={20} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  Adresse MAC *
+                </label>
+                <input
+                  type="text"
+                  value={editingLease.mac}
+                  onChange={(e) => setEditingLease({ ...editingLease, mac: e.target.value })}
+                  placeholder="AA:BB:CC:DD:EE:FF"
+                  className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white font-mono text-sm focus:outline-none focus:border-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">Format: XX:XX:XX:XX:XX:XX</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  Adresse IP *
+                </label>
+                <input
+                  type="text"
+                  value={editingLease.ip}
+                  onChange={(e) => setEditingLease({ ...editingLease, ip: e.target.value })}
+                  placeholder="192.168.1.100"
+                  className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white font-mono text-sm focus:outline-none focus:border-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">Doit être dans la plage DHCP</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  Commentaire
+                </label>
+                <input
+                  type="text"
+                  value={editingLease.comment}
+                  onChange={(e) => setEditingLease({ ...editingLease, comment: e.target.value })}
+                  placeholder="Ex: PC Bureau, NAS, Imprimante..."
+                  className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-800">
+              <button
+                onClick={() => {
+                  setShowLeaseModal(false);
+                  setEditingLease(null);
+                }}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={saveStaticLease}
+                disabled={!editingLease.mac || !editingLease.ip || isLoading}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Save size={16} />
+                )}
+                {editingLease.id ? 'Modifier' : 'Ajouter'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

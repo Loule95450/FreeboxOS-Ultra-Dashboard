@@ -114,6 +114,7 @@ export const API_ROUTES = {
 
   // Settings
   SETTINGS_DHCP: '/api/settings/dhcp',
+  DHCP_STATIC_LEASES: '/api/dhcp/static-leases',
   SETTINGS_FTP: '/api/settings/ftp',
   SETTINGS_VPN_SERVER: '/api/settings/vpn/server',
   SETTINGS_VPN_CLIENT: '/api/settings/vpn/client',
@@ -158,11 +159,17 @@ export const formatBytes = (bytes: number, decimals = 2): string => {
 };
 
 export const formatSpeed = (bytesPerSec: number): string => {
-  if (bytesPerSec === 0) return '0 B/s';
-  const k = 1024;
-  const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
-  const i = Math.floor(Math.log(bytesPerSec) / Math.log(k));
-  return parseFloat((bytesPerSec / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  // Convert bytes/s to bits/s (multiply by 8) for network speed display
+  // Network speeds are measured in bits (Mbps, Gbps), not bytes (MB/s, GB/s)
+  const bitsPerSec = bytesPerSec * 8;
+
+  if (bitsPerSec === 0) return '0 bps';
+
+  // Use decimal units (1000) for network speeds, not binary (1024)
+  const k = 1000;
+  const sizes = ['bps', 'Kbps', 'Mbps', 'Gbps'];
+  const i = Math.floor(Math.log(bitsPerSec) / Math.log(k));
+  return parseFloat((bitsPerSec / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
 export const formatBitrate = (bitsPerSec: number): string => {

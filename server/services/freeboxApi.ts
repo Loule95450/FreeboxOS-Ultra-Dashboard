@@ -324,11 +324,27 @@ class FreeboxApiService {
   }
 
   async getSystemInfo(): Promise<FreeboxApiResponse> {
-    return this.request('GET', API_ENDPOINTS.SYSTEM);
+    const result = await this.request('GET', API_ENDPOINTS.SYSTEM);
+    console.log('[FreeboxAPI] System info result:', JSON.stringify(result, null, 2));
+    return result;
   }
 
   async reboot(): Promise<FreeboxApiResponse> {
-    return this.request('POST', API_ENDPOINTS.SYSTEM_REBOOT);
+    console.log('[FreeboxAPI] Attempting reboot...');
+    const result = await this.request('POST', API_ENDPOINTS.SYSTEM_REBOOT);
+    console.log('[FreeboxAPI] Reboot result:', {
+      success: result.success,
+      error_code: result.error_code,
+      msg: result.msg
+    });
+
+    if (!result.success) {
+      console.error('[FreeboxAPI] Reboot failed:', result.msg || result.error_code);
+    } else {
+      console.log('[FreeboxAPI] Reboot command sent successfully');
+    }
+
+    return result;
   }
 
   // ==================== CONNECTION ====================
@@ -475,8 +491,16 @@ class FreeboxApiService {
     return this.request('GET', API_ENDPOINTS.DHCP_STATIC_LEASES);
   }
 
-  async createDhcpStaticLease(data: unknown): Promise<FreeboxApiResponse> {
-    return this.request('POST', API_ENDPOINTS.DHCP_STATIC_LEASES, data);
+  async getDhcpStaticLease(id: string): Promise<FreeboxApiResponse> {
+    return this.request('GET', `${API_ENDPOINTS.DHCP_STATIC_LEASES}${id}`);
+  }
+
+  async addDhcpStaticLease(mac: string, ip: string, comment?: string): Promise<FreeboxApiResponse> {
+    return this.request('POST', API_ENDPOINTS.DHCP_STATIC_LEASES, { mac, ip, comment: comment || '' });
+  }
+
+  async updateDhcpStaticLease(id: string, data: unknown): Promise<FreeboxApiResponse> {
+    return this.request('PUT', `${API_ENDPOINTS.DHCP_STATIC_LEASES}${id}`, data);
   }
 
   async deleteDhcpStaticLease(id: string): Promise<FreeboxApiResponse> {

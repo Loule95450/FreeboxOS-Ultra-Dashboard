@@ -36,6 +36,8 @@ import { useSystemStore } from '../stores/systemStore';
 import { useWifiStore } from '../stores/wifiStore';
 import { useLanStore } from '../stores/lanStore';
 import { useUptimeStore } from '../stores/uptimeStore';
+import { useCapabilitiesStore } from '../stores/capabilitiesStore';
+import { formatSpeed, formatBitrate } from '../utils/constants';
 
 type TimeRange = '1h' | '6h' | '24h' | '7d';
 
@@ -62,6 +64,29 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
   const { networks } = useWifiStore();
   const { devices } = useLanStore();
   const { getHistoryForDisplay } = useUptimeStore();
+  const { capabilities } = useCapabilitiesStore();
+
+  // Helper to get CPU temperature (works for all Freebox models)
+  // Ultra v9: Uses temp_cpu0-3 (4 CPU cores), returns average
+  // Other models: Use temp_cpum, temp_cpub, temp_sw (legacy fields)
+  const getCpuTemp = (): number | null => {
+    if (!info) return null;
+
+    // Ultra v9: average of 4 CPU cores
+    if (info.temp_cpu0 != null) {
+      const temps = [info.temp_cpu0, info.temp_cpu1, info.temp_cpu2, info.temp_cpu3]
+        .filter(t => t != null) as number[];
+      if (temps.length > 0) {
+        return Math.round(temps.reduce((a, b) => a + b, 0) / temps.length);
+      }
+    }
+
+    // Other models: legacy fields
+    if (info.temp_cpum != null && info.temp_cpum !== 0) return info.temp_cpum;
+    if (info.temp_cpub != null && info.temp_cpub !== 0) return info.temp_cpub;
+    if (info.temp_sw != null && info.temp_sw !== 0) return info.temp_sw;
+    return null;
+  };
 
   // Get uptime data from store
   const uptimeHistory = getHistoryForDisplay();
@@ -82,8 +107,18 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
       '24h': 86400,
       '7d': 604800
     };
+
+    // Initial fetch
     fetchExtendedHistory(durations[timeRange]);
     fetchTemperatureHistory(durations[timeRange]);
+
+    // Auto-refresh every 30 seconds
+    const refreshInterval = setInterval(() => {
+      fetchExtendedHistory(durations[timeRange]);
+      fetchTemperatureHistory(durations[timeRange]);
+    }, 30000);
+
+    return () => clearInterval(refreshInterval);
   }, [timeRange, fetchExtendedHistory, fetchTemperatureHistory]);
 
   // Calculate bandwidth stats
@@ -110,7 +145,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
     const history = temperatureHistory.length ? temperatureHistory : systemTempHistory;
     if (!history.length) return { avgCpu: 0, maxCpu: 0, avgSw: 0, maxSw: 0 };
 
-    const cpuTemps = history.map(p => p.cpuM || p.cpu0 || 0).filter(t => t > 0);
+    const cpuTemps = history.map(p => p.cpuM || 0).filter(t => t > 0);
     const swTemps = history.map(p => p.sw || 0).filter(t => t > 0);
 
     return {
@@ -248,28 +283,28 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                 <Download className="w-4 h-4 text-blue-500" />
                 Débit moyen ↓
               </div>
-              <div className="text-2xl font-bold text-white">{formatBytes(bandwidthStats.avgDown)}</div>
+              <div className="text-2xl font-bold text-white">{formatSpeed(bandwidthStats.avgDown * 1024)}</div>
             </div>
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Upload className="w-4 h-4 text-green-500" />
                 Débit moyen ↑
               </div>
-              <div className="text-2xl font-bold text-white">{formatBytes(bandwidthStats.avgUp)}</div>
+              <div className="text-2xl font-bold text-white">{formatSpeed(bandwidthStats.avgUp * 1024)}</div>
             </div>
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Zap className="w-4 h-4 text-blue-500" />
                 Débit max ↓
               </div>
-              <div className="text-2xl font-bold text-white">{formatBytes(bandwidthStats.maxDown)}</div>
+              <div className="text-2xl font-bold text-white">{formatSpeed(bandwidthStats.maxDown * 1024)}</div>
             </div>
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Zap className="w-4 h-4 text-green-500" />
                 Débit max ↑
               </div>
-              <div className="text-2xl font-bold text-white">{formatBytes(bandwidthStats.maxUp)}</div>
+              <div className="text-2xl font-bold text-white">{formatSpeed(bandwidthStats.maxUp * 1024)}</div>
             </div>
           </div>
 
@@ -281,10 +316,10 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                 <Download className="w-5 h-5 text-blue-500" />
               </div>
               <div className="text-4xl font-bold text-blue-500">
-                {status ? formatBytes(Math.round(status.rate_down / 1024)) : '0 KB/s'}
+                {status ? formatSpeed(status.rate_down) : '0 bps'}
               </div>
               <div className="text-sm text-gray-500 mt-2">
-                Bande passante: {status ? `${(status.bandwidth_down / 1000000).toFixed(0)} Mbps` : 'N/A'}
+                Bande passante: {status ? formatBitrate(status.bandwidth_down) : 'N/A'}
               </div>
             </div>
             <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
@@ -293,10 +328,10 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                 <Upload className="w-5 h-5 text-green-500" />
               </div>
               <div className="text-4xl font-bold text-green-500">
-                {status ? formatBytes(Math.round(status.rate_up / 1024)) : '0 KB/s'}
+                {status ? formatSpeed(status.rate_up) : '0 bps'}
               </div>
               <div className="text-sm text-gray-500 mt-2">
-                Bande passante: {status ? `${(status.bandwidth_up / 1000000).toFixed(0)} Mbps` : 'N/A'}
+                Bande passante: {status ? formatBitrate(status.bandwidth_up) : 'N/A'}
               </div>
             </div>
           </div>
@@ -332,10 +367,14 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                     <Tooltip
                       contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                       labelStyle={{ color: '#9ca3af' }}
-                      formatter={(value: number, name: string) => [
-                        formatBytes(value),
-                        name === 'download' ? 'Descendant' : 'Montant'
-                      ]}
+                      formatter={(value: number, _name: string, props: { dataKey: string }) => {
+                        const label = props.dataKey === 'download' ? 'Descendant' : 'Montant';
+                        const color = props.dataKey === 'download' ? COLORS.blue : COLORS.green;
+                        return [
+                          <span style={{ color }}>{formatBytes(value)}</span>,
+                          label
+                        ];
+                      }}
                     />
                     <Legend />
                     <Area
@@ -374,28 +413,27 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
       {activeTab === 'temperature' && (
         <div className="space-y-6">
           {/* Current Temps */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className={`grid ${info?.temp_sw ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2 md:grid-cols-3'} gap-4`}>
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Cpu className="w-4 h-4 text-orange-500" />
-                CPU Principal
+                {info?.temp_cpu0 != null ? 'CPU (Moyenne)' : 'CPU Principal'}
               </div>
               <div className="text-2xl font-bold text-white">
-                {(info?.temp_cpum ?? info?.temp_cpu0) ? `${info?.temp_cpum || info?.temp_cpu0}°C` : 'N/A'}
+                {getCpuTemp() != null ? `${getCpuTemp()}°C` : 'N/A'}
               </div>
             </div>
-            <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
-              <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
-                <HardDrive className="w-4 h-4 text-cyan-500" />
-                Switch
+            {info?.temp_sw && (
+              <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
+                <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
+                  <HardDrive className="w-4 h-4 text-cyan-500" />
+                  Switch
+                </div>
+                <div className="text-2xl font-bold text-white">
+                  {info.temp_sw}°C
+                </div>
               </div>
-              <div className="text-2xl font-bold text-white">
-                {info?.temp_sw ? `${info.temp_sw}°C` : (info?.temp_cpu1 ? `${info.temp_cpu1}°C` : 'Non disponible')}
-              </div>
-              {!info?.temp_sw && info?.temp_cpu1 && (
-                <div className="text-xs text-gray-500 mt-1">CPU secondaire</div>
-              )}
-            </div>
+            )}
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Fan className="w-4 h-4 text-blue-500" />
@@ -417,7 +455,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
           </div>
 
           {/* Temperature Stats */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className={`grid ${tempStats.avgSw > 0 ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
             <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
               <h3 className="text-lg font-semibold text-white mb-4">Statistiques CPU</h3>
               <div className="space-y-4">
@@ -439,17 +477,18 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                 </div>
               </div>
             </div>
-            <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
-              <h3 className="text-lg font-semibold text-white mb-4">Statistiques Switch</h3>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400">Température moyenne</span>
-                  <span className="text-white font-semibold">{tempStats.avgSw}°C</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400">Température maximale</span>
-                  <span className="text-cyan-500 font-semibold">{tempStats.maxSw}°C</span>
-                </div>
+            {tempStats.avgSw > 0 && (
+              <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
+                <h3 className="text-lg font-semibold text-white mb-4">Statistiques Switch</h3>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Température moyenne</span>
+                    <span className="text-white font-semibold">{tempStats.avgSw}°C</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Température maximale</span>
+                    <span className="text-cyan-500 font-semibold">{tempStats.maxSw}°C</span>
+                  </div>
                 <div className="w-full bg-gray-800 rounded-full h-2 mt-2">
                   <div
                     className="h-2 rounded-full bg-cyan-500 transition-all"
@@ -458,6 +497,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                 </div>
               </div>
             </div>
+            )}
           </div>
 
           {/* Temperature Chart */}
@@ -484,22 +524,15 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                     labelStyle={{ color: '#9ca3af' }}
                     formatter={(value: number, name: string) => {
                       const labels: Record<string, string> = {
-                        cpuM: 'CPU Main',
-                        cpuB: 'CPU Box',
-                        sw: 'Switch',
-                        cpu0: 'CPU 0',
-                        cpu1: 'CPU 1',
-                        cpu2: 'CPU 2',
-                        cpu3: 'CPU 3'
+                        cpuM: info?.temp_cpu0 != null ? 'CPU (Moyenne)' : 'CPU Principal',
+                        sw: 'Switch'
                       };
                       return [`${value}°C`, labels[name] || name];
                     }}
                   />
                   <Legend />
-                  <Line type="monotone" dataKey="cpuM" stroke={COLORS.orange} name="CPU Main" dot={false} />
-                  <Line type="monotone" dataKey="sw" stroke={COLORS.cyan} name="Switch" dot={false} />
-                  <Line type="monotone" dataKey="cpu0" stroke={COLORS.blue} name="CPU 0" dot={false} />
-                  <Line type="monotone" dataKey="cpu1" stroke={COLORS.green} name="CPU 1" dot={false} />
+                  <Line type="monotone" dataKey="cpuM" stroke={COLORS.orange} name={info?.temp_cpu0 != null ? 'CPU (Moyenne)' : 'CPU Principal'} dot={false} />
+                  {tempStats.avgSw > 0 && <Line type="monotone" dataKey="sw" stroke={COLORS.cyan} name="Switch" dot={false} />}
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -510,43 +543,49 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
       {/* WiFi Tab */}
       {activeTab === 'wifi' && (
         <div className="space-y-6">
-          {/* WiFi Overview */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
-              <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
-                <Wifi className="w-4 h-4 text-blue-500" />
-                Réseaux actifs
+          {/* WiFi Overview - Appareils par bande */}
+          <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Wifi className="w-5 h-5 text-blue-500" />
+              Appareils par bande WiFi
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {/* Always show 2.4GHz (all models support it) */}
+              <div className="bg-[#0a0a0a] rounded-lg p-4 border border-gray-700">
+                <div className="flex items-center gap-2 mb-2">
+                  <Activity className="w-4 h-4 text-green-500" />
+                  <span className="text-sm font-medium text-gray-400">2.4 GHz</span>
+                </div>
+                <div className="text-3xl font-bold text-white">
+                  {networks.find(n => n.band === '2.4GHz')?.connectedDevices || 0}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">appareils</div>
               </div>
-              <div className="text-2xl font-bold text-white">
-                {networks.filter(n => n.active).length}
+
+              <div className="bg-[#0a0a0a] rounded-lg p-4 border border-gray-700">
+                <div className="flex items-center gap-2 mb-2">
+                  <Activity className="w-4 h-4 text-purple-500" />
+                  <span className="text-sm font-medium text-gray-400">5 GHz</span>
+                </div>
+                <div className="text-3xl font-bold text-white">
+                  {networks.find(n => n.band === '5GHz')?.connectedDevices || 0}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">appareils</div>
               </div>
-            </div>
-            <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
-              <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
-                <HardDrive className="w-4 h-4 text-green-500" />
-                Appareils connectés
-              </div>
-              <div className="text-2xl font-bold text-white">
-                {networks.reduce((sum, n) => sum + n.connectedDevices, 0)}
-              </div>
-            </div>
-            <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
-              <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
-                <Activity className="w-4 h-4 text-cyan-500" />
-                6GHz Appareils
-              </div>
-              <div className="text-2xl font-bold text-white">
-                {networks.find(n => n.band === '6GHz')?.connectedDevices || 0}
-              </div>
-            </div>
-            <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
-              <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
-                <Activity className="w-4 h-4 text-purple-500" />
-                5GHz Appareils
-              </div>
-              <div className="text-2xl font-bold text-white">
-                {networks.find(n => n.band === '5GHz')?.connectedDevices || 0}
-              </div>
+
+              {/* Show 6GHz only if supported (Ultra v9, Delta v7) */}
+              {capabilities?.wifi6ghz && (
+                <div className="bg-[#0a0a0a] rounded-lg p-4 border border-gray-700">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Activity className="w-4 h-4 text-cyan-500" />
+                    <span className="text-sm font-medium text-gray-400">6 GHz</span>
+                  </div>
+                  <div className="text-3xl font-bold text-white">
+                    {networks.find(n => n.band === '6GHz')?.connectedDevices || 0}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">appareils</div>
+                </div>
+              )}
             </div>
           </div>
 

@@ -48,7 +48,7 @@ const App: React.FC = () => {
 
   // Data stores
   const { info: systemInfo, temperatureHistory: systemTempHistory, fetchSystemInfo, reboot } = useSystemStore();
-  const { status: connectionStatus, history: networkHistory, extendedHistory, fetchConnectionStatus, fetchExtendedHistory } = useConnectionStore();
+  const { status: connectionStatus, history: networkHistory, extendedHistory, temperatureHistory, fetchConnectionStatus, fetchExtendedHistory, fetchTemperatureHistory } = useConnectionStore();
   const { networks: wifiNetworks, isLoading: wifiLoading, fetchWifiStatus, toggleBss } = useWifiStore();
   const { devices, fetchDevices } = useLanStore();
   const { tasks: downloads, fetchDownloads } = useDownloadsStore();
@@ -618,10 +618,13 @@ const App: React.FC = () => {
           isOpen={isTrafficModalOpen}
           onClose={() => setIsTrafficModalOpen(false)}
           data={extendedHistory.length > 0 ? extendedHistory : undefined}
-          temperatureData={systemTempHistory}
+          temperatureData={temperatureHistory}
           systemInfo={systemInfo}
           connectionStatus={connectionStatus}
-          onFetchHistory={fetchExtendedHistory}
+          onFetchHistory={() => {
+            fetchExtendedHistory();
+            fetchTemperatureHistory();
+          }}
         />
 
         {/* WiFi Settings Modal */}

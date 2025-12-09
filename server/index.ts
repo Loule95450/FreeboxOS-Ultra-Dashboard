@@ -26,6 +26,7 @@ import settingsRoutes from './routes/settings.js';
 import notificationsRoutes from './routes/notifications.js';
 import speedtestRoutes from './routes/speedtest.js';
 import capabilitiesRoutes from './routes/capabilities.js';
+import dhcpRoutes from './routes/dhcp.js';
 
 const app = express();
 
@@ -64,6 +65,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/speedtest', speedtestRoutes);
 app.use('/api/capabilities', capabilitiesRoutes);
+app.use('/api/dhcp', dhcpRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

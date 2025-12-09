@@ -29,6 +29,14 @@ router.get('/', asyncHandler(async (_req, res) => {
     system.box_model_name = version.box_model_name || version.box_model || null;
     system.device_name = version.device_name || null;
     system.api_version = version.api_version || null;
+
+    // Debug temperature values
+    console.log('[System] Temperature values:', {
+      temp_cpum: system.temp_cpum,
+      temp_cpub: system.temp_cpub,
+      temp_sw: system.temp_sw,
+      fan_rpm: system.fan_rpm
+    });
   }
 
   res.json(systemResult);

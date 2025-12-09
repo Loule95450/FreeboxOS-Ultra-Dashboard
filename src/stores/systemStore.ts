@@ -5,13 +5,9 @@ import type { SystemInfo } from '../types/api';
 
 interface TemperatureHistoryPoint {
   time: string;
-  cpuM?: number;
-  cpuB?: number;
-  sw?: number;
-  cpu0?: number;
-  cpu1?: number;
-  cpu2?: number;
-  cpu3?: number;
+  cpuM?: number;  // temp_cpum - CPU main
+  cpuB?: number;  // temp_cpub - CPU box
+  sw?: number;    // temp_sw - Switch
 }
 
 interface SystemState {
@@ -40,15 +36,12 @@ export const useSystemStore = create<SystemState>((set, get) => ({
         const { temperatureHistory } = get();
 
         // Build temperature history from real-time data
+        // All Freebox models (Ultra v9, Pop v8, Delta v7, Revolution v6) use the same temperature fields
         const newPoint: TemperatureHistoryPoint = {
           time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          cpuM: info.temp_cpum,
-          cpuB: info.temp_cpub,
-          sw: info.temp_sw,
-          cpu0: info.temp_cpu0,
-          cpu1: info.temp_cpu1,
-          cpu2: info.temp_cpu2,
-          cpu3: info.temp_cpu3
+          cpuM: info.temp_cpum,  // CPU main temperature
+          cpuB: info.temp_cpub,  // CPU box temperature
+          sw: info.temp_sw       // Switch temperature
         };
 
         // Keep last 60 points (about 30 minutes at 30s polling interval)

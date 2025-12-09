@@ -44,14 +44,16 @@ export interface SystemInfo {
   uptime: string;
   uptime_val: number;
   board_name: string;
-  // Temperature fields - varies by Freebox model
-  temp_cpum?: number;      // Older Freebox models
-  temp_sw?: number;        // Older models
-  temp_cpub?: number;      // Older models
-  temp_cpu0?: number;      // Freebox v9+
-  temp_cpu1?: number;      // Freebox v9+
-  temp_cpu2?: number;      // Freebox v9+
-  temp_cpu3?: number;      // Freebox v9+
+  // Temperature fields vary by model:
+  // Ultra v9: temp_cpu0, temp_cpu1, temp_cpu2, temp_cpu3 (4 CPU cores)
+  // Other models: temp_cpum, temp_sw, temp_cpub (legacy fields)
+  temp_cpu0?: number;      // CPU core 0 (Ultra)
+  temp_cpu1?: number;      // CPU core 1 (Ultra)
+  temp_cpu2?: number;      // CPU core 2 (Ultra)
+  temp_cpu3?: number;      // CPU core 3 (Ultra)
+  temp_cpum?: number;      // CPU main (Delta/Pop/Revolution)
+  temp_sw?: number;        // Switch (Delta/Pop/Revolution)
+  temp_cpub?: number;      // CPU box (Delta/Pop/Revolution)
   fan_rpm: number;
   box_authenticated: boolean;
   disk_status: string;
@@ -386,4 +388,25 @@ export interface Contact {
   last_update?: number;
   // Numbers can be included when fetching contact details
   numbers?: ContactNumber[];
+}
+
+// DHCP types
+export interface DhcpConfig {
+  enabled: boolean;
+  gateway: string;
+  netmask: string;
+  ip_range_start: string;
+  ip_range_end: string;
+  always_broadcast: boolean;
+  sticky_assign: boolean;
+  dns: string[];
+}
+
+export interface DhcpStaticLease {
+  id: string;
+  mac: string;
+  ip: string;
+  comment?: string;
+  hostname?: string;
+  host?: LanHost;
 }

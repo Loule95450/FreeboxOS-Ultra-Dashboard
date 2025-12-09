@@ -103,8 +103,12 @@ router.get('/full', asyncHandler(async (_req, res) => {
   let filteredBss = bssData || [];
   const filteredDevicesByBand = { ...devicesByBand };
 
+  // NOTE: Inactive/disabled WiFi bands (e.g., 5GHz power-saving mode on Ultra)
+  // are NOT returned by the Freebox API, so we cannot display them.
+  // This is an API limitation, not a dashboard issue.
+
   if (!supports6ghz && Array.isArray(apsData) && Array.isArray(bssData)) {
-    // Filter out 6GHz APs
+    // Filter out 6GHz APs (for Pop v8, Revolution v6)
     filteredAps = apsData.filter(
       (ap: { band?: string }) => !ap.band?.toLowerCase().includes('6g')
     );

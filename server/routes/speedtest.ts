@@ -30,11 +30,13 @@ interface ConnectionStatus {
 // Parse ping output to extract latency stats
 function parsePingOutput(output: string): { avg: number; mdev: number; loss: number } {
   try {
-    // Parse packet loss (e.g., "0% packet loss")
-    const lossMatch = output.match(/(\d+(?:\.\d+)?)% packet loss/);
-    const loss = lossMatch ? parseFloat(lossMatch[1]) : 0;
+    // Initialize variables
+    let avg = 0;
+    let mdev = 0;
+    let loss = 0;
 
     if (!isWindows) {
+      // Parse packet loss (e.g., "0% packet loss")
       const lossMatch = output.match(/(\d+(?:\.\d+)?)% packet loss/);
       loss = lossMatch ? parseFloat(lossMatch[1]) : 0;
 
@@ -48,20 +50,20 @@ function parsePingOutput(output: string): { avg: number; mdev: number; loss: num
       } else {
         loss = loss === 0 && !output.includes('time=') ? 100 : loss;
       }
-    } 
-    
+    }
+
     // --- WINDOWS CASE ---
     else {
       const lossMatchWin = output.match(/\((\d+)%\s*(?:perte|loss)\)/i);
       loss = lossMatchWin ? parseFloat(lossMatchWin[1]) : 0;
 
       const avgMatch = output.match(/(?:Moyenne|Average)\s*=\s*(\d+)ms/i);
-      
+
       if (avgMatch) {
         avg = parseFloat(avgMatch[1]);
-        mdev = 0; 
+        mdev = 0; // Windows ping doesn't provide jitter, use 0
       } else {
-         loss = 100;
+        loss = 100;
       }
     }
 
@@ -91,6 +93,8 @@ router.get('/ping', asyncHandler(async (req, res) => {
       jitter: Math.round(stats.mdev * 100) / 100,
       packetLoss: stats.loss
     };
+
+    console.log('[Speedtest] Ping result:', result, 'raw stats:', stats);
 
     res.json({
       success: true,

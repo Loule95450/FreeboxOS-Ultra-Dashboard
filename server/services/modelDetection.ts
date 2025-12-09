@@ -101,6 +101,14 @@ class ModelDetectionService {
       const modelName = versionData.box_model_name || versionData.box_model || versionData.device_name || 'Unknown';
       const boxFlavor = (versionData.box_flavor === 'full' ? 'full' : 'light') as BoxFlavor;
 
+      console.log('[ModelDetection] API response:', {
+        box_model_name: versionData.box_model_name,
+        box_model: versionData.box_model,
+        box_flavor: versionData.box_flavor,
+        device_name: versionData.device_name
+      });
+      console.log(`[ModelDetection] Using model name: "${modelName}"`);
+
       // Detect model from name
       const model = detectModelFromName(modelName);
 
