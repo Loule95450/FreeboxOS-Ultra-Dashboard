@@ -6,8 +6,9 @@ const router = Router();
 
 // GET /api/fs/list - List files in directory
 router.get('/list', asyncHandler(async (req, res) => {
-  const encodedPath = req.query.path as string || '/';
-  const path = decodeURIComponent(encodedPath);
+  // If no path provided, list root directory
+  // If path provided, it's already base64 encoded from Freebox API
+  const path = req.query.path ? decodeURIComponent(req.query.path as string) : '/';
   const result = await freeboxApi.listFiles(path);
   res.json(result);
 }));

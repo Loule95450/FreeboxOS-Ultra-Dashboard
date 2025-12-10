@@ -87,7 +87,13 @@ export const useFsStore = create<FsState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const response = await api.get<FsFile[]>(`${API_ROUTES.FS}/list?path=${encodeURIComponent(targetPath)}`);
+      // For root path, don't send any path parameter
+      // For other paths, send the base64-encoded path as-is (returned by Freebox API)
+      const url = (targetPath === '/' || targetPath === '')
+        ? `${API_ROUTES.FS}/list`
+        : `${API_ROUTES.FS}/list?path=${encodeURIComponent(targetPath)}`;
+
+      const response = await api.get<FsFile[]>(url);
       if (response.success && response.result) {
         // Sort: directories first, then by name
         const sorted = [...response.result].sort((a, b) => {

@@ -305,14 +305,9 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
     fetchStorage();
     fetchDisks();
     fetchDownloads();
-  }, [fetchStorage, fetchDisks, fetchDownloads]);
-
-  // Only fetch files if we have storage
-  useEffect(() => {
-    if (storage && storage.total_bytes > 0) {
-      listFiles('/');
-    }
-  }, [storage, listFiles]);
+    // Always try to list files on mount - the API will handle errors gracefully
+    listFiles('/');
+  }, [fetchStorage, fetchDisks, fetchDownloads, listFiles]);
 
   // Check if we have a disk available
   const hasDisk = (storage && storage.total_bytes > 0) || disks.length > 0;
