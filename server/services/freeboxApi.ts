@@ -299,6 +299,16 @@ class FreeboxApiService {
         return this.sessionToken !== null;
     }
 
+    // Get session token (for WebSocket authentication)
+    getSessionToken(): string | null {
+        return this.sessionToken;
+    }
+
+    // Get base URL (for WebSocket connection)
+    getBaseUrl(): string {
+        return this.baseUrl;
+    }
+
     // Get permissions
     getPermissions(): Record<string, boolean> {
         return this.permissions;
@@ -449,6 +459,50 @@ class FreeboxApiService {
     async stopWps(): Promise<FreeboxApiResponse> {
         // WPS session stop - DELETE current session
         return this.request('DELETE', '/wifi/wps/sessions/');
+    }
+
+    // WiFi Temporary Disable (v13.0+)
+    async getWifiTempDisableStatus(): Promise<FreeboxApiResponse> {
+        return this.request('GET', '/wifi/temp_disable/');
+    }
+
+    async setWifiTempDisable(duration: number): Promise<FreeboxApiResponse> {
+        // Duration in seconds (0 to cancel)
+        return this.request('POST', '/wifi/temp_disable/', { duration });
+    }
+
+    async cancelWifiTempDisable(): Promise<FreeboxApiResponse> {
+        return this.request('DELETE', '/wifi/temp_disable/');
+    }
+
+    // WiFi Custom Key / Guest Network (v14.0+)
+    async getWifiCustomKeyConfig(): Promise<FreeboxApiResponse> {
+        return this.request('GET', '/wifi/custom_key/config/');
+    }
+
+    async updateWifiCustomKeyConfig(data: unknown): Promise<FreeboxApiResponse> {
+        return this.request('PUT', '/wifi/custom_key/config/', data);
+    }
+
+    async getWifiCustomKeys(): Promise<FreeboxApiResponse> {
+        return this.request('GET', '/wifi/custom_key/');
+    }
+
+    async createWifiCustomKey(data: unknown): Promise<FreeboxApiResponse> {
+        return this.request('POST', '/wifi/custom_key/', data);
+    }
+
+    async deleteWifiCustomKey(id: number): Promise<FreeboxApiResponse> {
+        return this.request('DELETE', `/wifi/custom_key/${id}`);
+    }
+
+    // WiFi MLO - Multi Link Operation (v14.0+ - WiFi 7)
+    async getWifiMloConfig(): Promise<FreeboxApiResponse> {
+        return this.request('GET', '/wifi/mlo/config/');
+    }
+
+    async updateWifiMloConfig(data: unknown): Promise<FreeboxApiResponse> {
+        return this.request('PUT', '/wifi/mlo/config/', data);
     }
 
     // ==================== LAN ====================
@@ -709,8 +763,33 @@ class FreeboxApiService {
         return this.request('GET', API_ENDPOINTS.PROFILE_NETWORK_CONTROL);
     }
 
-    async updateNetworkControl(hostId: string, data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${hostId}`, data);
+    async getNetworkControlForProfile(profileId: number): Promise<FreeboxApiResponse> {
+        return this.request('GET', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}`);
+    }
+
+    async updateNetworkControlForProfile(profileId: number, data: unknown): Promise<FreeboxApiResponse> {
+        return this.request('PUT', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}`, data);
+    }
+
+    // Network Control Rules
+    async getNetworkControlRules(profileId: number): Promise<FreeboxApiResponse> {
+        return this.request('GET', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules`);
+    }
+
+    async getNetworkControlRule(profileId: number, ruleId: number): Promise<FreeboxApiResponse> {
+        return this.request('GET', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules/${ruleId}`);
+    }
+
+    async createNetworkControlRule(profileId: number, data: unknown): Promise<FreeboxApiResponse> {
+        return this.request('POST', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules/`, data);
+    }
+
+    async updateNetworkControlRule(profileId: number, ruleId: number, data: unknown): Promise<FreeboxApiResponse> {
+        return this.request('PUT', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules/${ruleId}`, data);
+    }
+
+    async deleteNetworkControlRule(profileId: number, ruleId: number): Promise<FreeboxApiResponse> {
+        return this.request('DELETE', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules/${ruleId}`);
     }
 
     async getParentalConfig(): Promise<FreeboxApiResponse> {

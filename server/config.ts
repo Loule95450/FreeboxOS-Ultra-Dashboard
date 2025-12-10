@@ -33,8 +33,8 @@ export const config = {
     appVersion: process.env.FREEBOX_APP_VERSION || '1.0.0',
     deviceName: process.env.FREEBOX_DEVICE_NAME || 'Dashboard Web App',
 
-    // API version
-    apiVersion: 'v4',
+    // API version (v15 - latest with pagination support for file listing)
+    apiVersion: 'v15',
 
     // Timeouts
     requestTimeout: 10000,
@@ -78,6 +78,9 @@ export const API_ENDPOINTS = {
   WIFI_MAC_FILTER: '/wifi/mac_filter/',
   WIFI_PLANNING: '/wifi/planning/',
   WIFI_WPS: '/wifi/wps/',
+  WIFI_TEMP_DISABLE: '/wifi/temp_disable/',  // v13.0 - Temporarily disable WiFi
+  WIFI_CUSTOM_KEY: '/wifi/custom_key/',      // v14.0 - Guest network configuration
+  WIFI_MLO_CONFIG: '/wifi/mlo/config/',      // v14.0 - Multi Link Operation (WiFi 7)
 
   // LAN
   LAN_CONFIG: '/lan/config/',

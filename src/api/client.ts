@@ -71,6 +71,19 @@ class ApiClient {
         };
       }
 
+      // Check for Freebox deprecated API error
+      if (data && !data.success && data.error_code === 'deprecated') {
+        console.warn(`[API] Deprecated API for ${method} ${endpoint}: ${data.msg}`);
+
+        return {
+          success: false,
+          error: {
+            code: 'DEPRECATED',
+            message: data.msg || 'Cette fonctionnalité n\'est plus disponible'
+          }
+        };
+      }
+
       if (!response.ok) {
         return {
           success: false,

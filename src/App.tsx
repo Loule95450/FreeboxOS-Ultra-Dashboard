@@ -15,6 +15,7 @@ import { ActionButton, UnsupportedFeature } from './components/ui';
 import { LoginModal, TrafficHistoryModal, WifiSettingsModal, CreateVmModal } from './components/modals';
 import { TvPage, PhonePage, FilesPage, VmsPage, AnalyticsPage, SettingsPage } from './pages';
 import { usePolling } from './hooks/usePolling';
+import { useConnectionWebSocket } from './hooks/useConnectionWebSocket';
 import {
   useAuthStore,
   useSystemStore,
@@ -91,11 +92,8 @@ const App: React.FC = () => {
     return () => stopPermissionsRefresh();
   }, [isLoggedIn]);
 
-  // Polling when logged in
-  usePolling(fetchConnectionStatus, {
-    enabled: isLoggedIn,
-    interval: POLLING_INTERVALS.connection
-  });
+  // WebSocket for real-time connection status (replaces polling)
+  useConnectionWebSocket({ enabled: isLoggedIn });
 
   usePolling(fetchSystemInfo, {
     enabled: isLoggedIn,

@@ -10,6 +10,11 @@ export default defineConfig({
       '/api': {
         target: `http://localhost:${process.env.PORT || '3001'}`,
         changeOrigin: true
+      },
+      '/ws': {
+        target: `ws://localhost:${process.env.PORT || '3001'}`,
+        ws: true,
+        changeOrigin: true
       }
     }
   },
