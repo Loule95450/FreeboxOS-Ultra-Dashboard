@@ -2,9 +2,11 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import http from 'http';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { connectionWebSocket } from './services/connectionWebSocket.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -84,10 +86,21 @@ app.get('/{*splat}', (_req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
+// Create HTTP server (needed for WebSocket)
+const server = http.createServer(app);
+
+// Log upgrade requests for debugging
+server.on('upgrade', (request, socket, head) => {
+  console.log('[HTTP] Upgrade request received:', request.url);
+});
+
+// Initialize WebSocket server
+connectionWebSocket.init(server);
+
 // Start server
 const port = config.port;
 const host = '0.0.0.0'; // Bind to all interfaces for Docker compatibility
-app.listen(port, host, () => {
+server.listen(port, host, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║           Freebox Dashboard Backend Server                ║
@@ -95,6 +108,7 @@ app.listen(port, host, () => {
 ║  Local:   http://localhost:${port}                        ║
 ║  Network: http://IP_DU_SERVEUR:${port}                    ║
 ║  Freebox: ${config.freebox.url}                           ║
+║  WebSocket: ws://localhost:${port}/ws/connection          ║
 ╚═══════════════════════════════════════════════════════════╝
   `);
 });

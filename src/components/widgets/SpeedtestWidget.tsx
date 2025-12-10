@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { ArrowDown, ArrowUp, RefreshCw, Info, Wifi, Zap, Clock } from 'lucide-react';
 import { SparkLine } from './SparkLine';
+import { Tooltip } from '../ui/Tooltip';
 import { api } from '../../api/client';
 
 interface BandwidthInfo {
@@ -128,9 +129,12 @@ export const SpeedtestWidget: React.FC = () => {
       <div className="grid grid-cols-2 gap-4">
         {/* Download */}
         <div className="bg-[#151515] flex flex-col p-4 rounded-lg border border-gray-800">
-          <div className="flex items-center justify-center gap-2 text-xs text-gray-500 mb-2">
-            <ArrowDown size={12} className="text-blue-500" />
-            Descendant max
+          <div className="flex flex-grow items-center justify-center gap-2 text-xs text-gray-500 mb-2">
+            <ArrowDown size={14} className="text-blue-500" />
+            Débit descendant maximal
+            <Tooltip content="Débit théorique maximal">
+              <Info size={14} className="text-gray-600 cursor-help" />
+            </Tooltip>
           </div>
           <div className="flex items-baseline justify-center gap-1">
             <span className="text-2xl font-bold text-white">{downloadMax.value}</span>
@@ -140,9 +144,12 @@ export const SpeedtestWidget: React.FC = () => {
 
         {/* Upload */}
         <div className="bg-[#151515] flex flex-col p-4 rounded-lg border border-gray-800">
-          <div className="flex items-center justify-center gap-2 text-xs text-gray-500 mb-2">
-            <ArrowUp size={12} className="text-emerald-500" />
-            Montant max
+          <div className="flex flex-grow items-center justify-center gap-2 text-xs text-gray-500 mb-2">
+            <ArrowUp size={14} className="text-emerald-500" />
+            Débit montant maximal
+            <Tooltip content="Débit théorique maximal">
+              <Info size={14} className="text-gray-600 cursor-help" />
+            </Tooltip>
           </div>
           <div className="flex items-baseline justify-center gap-1">
             <span className="text-2xl font-bold text-white">{uploadMax.value}</span>

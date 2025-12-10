@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
+import { rebootScheduler } from '../services/scheduler.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
 const router = Router();
@@ -30,16 +31,34 @@ router.get('/', asyncHandler(async (_req, res) => {
     system.device_name = version.device_name || null;
     system.api_version = version.api_version || null;
 
-    // Debug temperature values
+    // Debug temperature values (all temp fields)
+    console.log('[System] Full system data keys:', Object.keys(system));
     console.log('[System] Temperature values:', {
+      temp_cpu0: system.temp_cpu0,
+      temp_cpu1: system.temp_cpu1,
+      temp_cpu2: system.temp_cpu2,
+      temp_cpu3: system.temp_cpu3,
       temp_cpum: system.temp_cpum,
       temp_cpub: system.temp_cpub,
       temp_sw: system.temp_sw,
-      fan_rpm: system.fan_rpm
+      fan_rpm: system.fan_rpm,
+      sensors: system.sensors // v15 might use a sensors array
     });
   }
 
   res.json(systemResult);
+}));
+
+// GET /api/system/reboot/schedule - Get reboot schedule
+router.get('/reboot/schedule', asyncHandler(async (_req, res) => {
+  const schedule = rebootScheduler.getSchedule();
+  res.json({ success: true, result: schedule });
+}));
+
+// POST /api/system/reboot/schedule - Update reboot schedule
+router.post('/reboot/schedule', asyncHandler(async (req, res) => {
+  const schedule = rebootScheduler.updateSchedule(req.body);
+  res.json({ success: true, result: schedule });
 }));
 
 // POST /api/system/reboot - Reboot Freebox

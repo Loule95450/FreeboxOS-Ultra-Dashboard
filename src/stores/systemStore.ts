@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
 import { API_ROUTES } from '../utils/constants';
-import type { SystemInfo } from '../types/api';
+import type { SystemInfo, RebootSchedule } from '../types/api';
 
 interface TemperatureHistoryPoint {
   time: string;
@@ -12,17 +12,21 @@ interface TemperatureHistoryPoint {
 
 interface SystemState {
   info: SystemInfo | null;
+  schedule: RebootSchedule | null;
   temperatureHistory: TemperatureHistoryPoint[];
   isLoading: boolean;
   error: string | null;
 
   // Actions
   fetchSystemInfo: () => Promise<void>;
+  fetchSchedule: () => Promise<void>;
+  updateSchedule: (schedule: Partial<RebootSchedule>) => Promise<boolean>;
   reboot: () => Promise<boolean>;
 }
 
 export const useSystemStore = create<SystemState>((set, get) => ({
   info: null,
+  schedule: null,
   temperatureHistory: [],
   isLoading: false,
   error: null,
@@ -56,6 +60,31 @@ export const useSystemStore = create<SystemState>((set, get) => ({
       }
     } catch {
       set({ isLoading: false, error: 'Failed to fetch system info' });
+    }
+  },
+
+  fetchSchedule: async () => {
+    try {
+      const response = await api.get<RebootSchedule>(API_ROUTES.SYSTEM_REBOOT_SCHEDULE);
+      if (response.success && response.result) {
+        set({ schedule: response.result });
+      }
+    } catch (error) {
+      console.error('Failed to fetch schedule:', error);
+    }
+  },
+
+  updateSchedule: async (schedule: Partial<RebootSchedule>) => {
+    try {
+      const response = await api.post<RebootSchedule>(API_ROUTES.SYSTEM_REBOOT_SCHEDULE, schedule);
+      if (response.success && response.result) {
+        set({ schedule: response.result });
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Failed to update schedule:', error);
+      return false;
     }
   },
 

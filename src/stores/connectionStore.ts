@@ -22,6 +22,7 @@ interface ConnectionState {
   temperatureHistory: TemperatureStat[];
   isLoading: boolean;
   error: string | null;
+  rrdPermissionDenied: boolean;     // True if RRD access is denied (missing "settings" permission)
 
   // Actions
   fetchConnectionStatus: () => Promise<void>;
@@ -37,6 +38,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   temperatureHistory: [],
   isLoading: false,
   error: null,
+  rrdPermissionDenied: false,
 
   fetchConnectionStatus: async () => {
     try {
@@ -73,6 +75,30 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       );
       console.log('[ConnectionStore] History response:', response);
 
+      // Check for permission denied error
+      if (!response.success) {
+        const resp = response as {
+          msg?: string;
+          error_code?: string;
+          missing_right?: string;
+          error?: { code?: string; message?: string };
+        };
+        console.log('[ConnectionStore] Error response:', resp);
+
+        const isPermissionDenied =
+          resp.error?.code === 'INSUFFICIENT_RIGHTS' ||
+          resp.error_code === 'insufficient_rights' ||
+          resp.missing_right === 'settings' ||
+          (resp.msg && (resp.msg.includes('autorisée') || resp.msg.includes('permission'))) ||
+          (resp.error?.message && resp.error.message.includes('autorisée'));
+
+        if (isPermissionDenied) {
+          console.log('[ConnectionStore] RRD permission denied detected');
+          set({ extendedHistory: [], isLoading: false, rrdPermissionDenied: true });
+          return;
+        }
+      }
+
       if (response.success && response.result && response.result.data) {
         const data = response.result.data;
         console.log('[ConnectionStore] Raw data points:', data.length, 'first:', JSON.stringify(data[0]));
@@ -94,7 +120,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
         console.log('[ConnectionStore] Processed history:', extendedHistory.length, 'points');
         console.log('[ConnectionStore] First 3 data points:', extendedHistory.slice(0, 3));
         console.log('[ConnectionStore] Stats - avgDown:', Math.round(extendedHistory.reduce((sum, p) => sum + p.download, 0) / extendedHistory.length), 'KB/s');
-        set({ extendedHistory, isLoading: false });
+        set({ extendedHistory, isLoading: false, rrdPermissionDenied: false });
       } else {
         console.log('[ConnectionStore] No data in response, success:', response.success, 'result:', response.result);
         set({ extendedHistory: [], isLoading: false });

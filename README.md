@@ -92,6 +92,25 @@ Pour tester des modifications ou contribuer :
 docker-compose -f docker-compose.local.yml up -d --build
 ```
 
+#### Mode developpement avec Hot Reload
+
+Pour developper avec recompilation automatique et rafraichissement du navigateur :
+
+```bash
+# Lancer le mode dev avec hot reload
+docker compose -f docker-compose.dev.yml up --build
+```
+
+# Exemple avec des ports alternatifs 
+```bash 
+DASHBOARD_PORT=5777 SERVER_PORT=5776 docker compose -f docker-compose.dev.yml up --build
+```
+
+- **Frontend** : http://localhost:3000 (Vite HMR - rafraichissement instantane)
+- **Backend API** : http://localhost:3001 (redemarrage auto avec tsx watch)
+
+Les modifications de fichiers sources sont automatiquement detectees et appliquees sans redemarrer le conteneur.
+
 ### Lancement rapide
 
 ```bash
@@ -283,7 +302,7 @@ npm install
 npm run dev
 ```
 
-- Frontend : http://localhost:5173 (hot-reload)
+- Frontend : http://localhost:3000 (hot-reload)
 - Backend API : http://localhost:3001
 
 ### Build Production

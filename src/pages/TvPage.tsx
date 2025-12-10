@@ -17,6 +17,8 @@ import {
   X
 } from 'lucide-react';
 import { useTvStore, useSystemStore } from '../stores';
+import { useAuthStore } from '../stores/authStore';
+import { PermissionBanner } from '../components/ui/PermissionBanner';
 import type { PvrRecording, PvrProgrammed, TvChannel } from '../types/api';
 
 // Format duration from seconds to HH:MM:SS
@@ -495,6 +497,10 @@ export const TvPage: React.FC<TvPageProps> = ({ onBack }) => {
     updatePvrConfig
   } = useTvStore();
 
+  // Get permissions from auth store
+  const { permissions, freeboxUrl } = useAuthStore();
+  const hasPvrPermission = permissions.pvr === true;
+
   const [activeTab, setActiveTab] = useState<'recordings' | 'programmed'>('recordings');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showRecordingForm, setShowRecordingForm] = useState(false);
@@ -729,6 +735,11 @@ export const TvPage: React.FC<TvPageProps> = ({ onBack }) => {
             {/* Programmed tab */}
             {!isLoading && activeTab === 'programmed' && (
               <>
+                {/* Permission warning */}
+                {!hasPvrPermission && (
+                  <PermissionBanner permission="pvr" freeboxUrl={freeboxUrl} />
+                )}
+
                 {programmed.length > 0 ? (
                   <div className={viewMode === 'grid'
                     ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4'

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { modelDetection } from '../services/modelDetection.js';
+import { connectionWebSocket } from '../services/connectionWebSocket.js';
 import { asyncHandler, createError } from '../middleware/errorHandler.js';
 
 const router = Router();
@@ -42,6 +43,9 @@ router.post('/login', asyncHandler(async (_req, res) => {
   // Detect model capabilities after successful login
   const capabilities = await modelDetection.detectModel();
 
+  // Notify WebSocket service to connect to Freebox
+  connectionWebSocket.onLogin();
+
   res.json({
     success: true,
     result: {
@@ -57,6 +61,8 @@ router.post('/logout', asyncHandler(async (_req, res) => {
   await freeboxApi.logout();
   // Clear cached capabilities on logout
   modelDetection.clearCache();
+  // Notify WebSocket service to disconnect from Freebox
+  connectionWebSocket.onLogout();
   res.json({
     success: true,
     result: { message: 'Logged out' }

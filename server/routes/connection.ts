@@ -33,10 +33,13 @@ router.get('/history', asyncHandler(async (req, res) => {
 
   // Log for debugging
   const rrdResult = result.result as { data?: unknown[] } | undefined;
-  if (result.success && rrdResult?.data) {
-    console.log('[RRD] Net history - points:', rrdResult.data.length, 'sample:', rrdResult.data[0]);
+  if (result.success && rrdResult?.data && rrdResult.data.length > 0) {
+    const sample = rrdResult.data[0] as Record<string, unknown>;
+    console.log('[RRD] Net history - points:', rrdResult.data.length);
+    console.log('[RRD] Net history - sample keys:', Object.keys(sample));
+    console.log('[RRD] Net history - sample values:', JSON.stringify(sample));
   } else {
-    console.log('[RRD] Net history failed or empty:', result.success, result.msg || result.error_code);
+    console.log('[RRD] Net history failed or empty:', result.success, result.msg || (result as Record<string, unknown>).error_code);
   }
 
   res.json(result);
@@ -55,6 +58,12 @@ router.get('/temp-history', asyncHandler(async (req, res) => {
 // GET /api/connection/logs - Get connection logs
 router.get('/logs', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getConnectionLogs();
+  res.json(result);
+}));
+
+// PUT /api/connection/config - Update connection config
+router.put('/config', asyncHandler(async (req, res) => {
+  const result = await freeboxApi.updateConnectionConfig(req.body);
   res.json(result);
 }));
 

@@ -6,6 +6,28 @@ interface LoginModalProps {
   isOpen: boolean;
 }
 
+// Check if URL is a local IP address
+const isLocalIpUrl = (url: string): boolean => {
+  try {
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname;
+    // Check for common private IP patterns
+    return /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|localhost|127\.)/.test(hostname);
+  } catch {
+    return false;
+  }
+};
+
+// Extract IP from URL
+const extractIpFromUrl = (url: string): string => {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.hostname;
+  } catch {
+    return '192.168.1.254';
+  }
+};
+
 export const LoginModal: React.FC<LoginModalProps> = ({ isOpen }) => {
   const {
     isRegistered,
@@ -19,9 +41,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen }) => {
     clearError
   } = useAuthStore();
 
-  const [urlInput, setUrlInput] = useState(freeboxUrl);
-  const [useLocalIp, setUseLocalIp] = useState(false);
-  const [localIp, setLocalIp] = useState('192.168.1.254');
+  // Determine initial state based on saved URL
+  const savedIsLocalIp = isLocalIpUrl(freeboxUrl);
+  const [urlInput, setUrlInput] = useState(savedIsLocalIp ? 'https://mafreebox.freebox.fr' : freeboxUrl);
+  const [useLocalIp, setUseLocalIp] = useState(savedIsLocalIp);
+  const [localIp, setLocalIp] = useState(savedIsLocalIp ? extractIpFromUrl(freeboxUrl) : '192.168.1.254');
 
   if (!isOpen) return null;
 

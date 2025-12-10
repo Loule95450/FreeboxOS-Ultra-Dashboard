@@ -37,6 +37,25 @@ export interface RegistrationStatus {
 }
 
 // System types
+export interface RebootSchedule {
+  enabled: boolean;
+  mapping: Record<number, string>; // Key: day (0-6), Value: "HH:MM"
+}
+
+// Sensor data format (API v8+)
+export interface SystemSensor {
+  id: string;      // e.g. "temp_cpu0", "temp_hdd", "t1", "cpu_ap"
+  name: string;    // e.g. "Température CPU 0", "Disque dur"
+  value: number;   // Temperature in °C
+}
+
+// Fan data format (API v8+)
+export interface SystemFan {
+  id: string;      // e.g. "main", "secondary-fan"
+  name: string;    // e.g. "Ventilateur 1", "Ventilateur 2"
+  value: number;   // RPM
+}
+
 export interface SystemInfo {
   firmware_version: string;
   mac: string;
@@ -44,7 +63,11 @@ export interface SystemInfo {
   uptime: string;
   uptime_val: number;
   board_name: string;
-  // Temperature fields vary by model:
+  // API v8+: sensors array for temperatures
+  sensors?: SystemSensor[];
+  // API v8+: fans array for fan speeds
+  fans?: SystemFan[];
+  // Temperature fields vary by model (legacy API < v8):
   // Ultra v9: temp_cpu0, temp_cpu1, temp_cpu2, temp_cpu3 (4 CPU cores)
   // Other models: temp_cpum, temp_sw, temp_cpub (legacy fields)
   temp_cpu0?: number;      // CPU core 0 (Ultra)
@@ -54,10 +77,10 @@ export interface SystemInfo {
   temp_cpum?: number;      // CPU main (Delta/Pop/Revolution)
   temp_sw?: number;        // Switch (Delta/Pop/Revolution)
   temp_cpub?: number;      // CPU box (Delta/Pop/Revolution)
-  fan_rpm: number;
+  fan_rpm?: number;        // Legacy fan RPM (now in fans array for v8+)
   box_authenticated: boolean;
   disk_status: string;
-  box_flavor: string;
+  box_flavor?: string;
   user_main_storage: string;
   // Added from api_version endpoint
   box_model_name?: string; // e.g. "Freebox v9 (r1)"

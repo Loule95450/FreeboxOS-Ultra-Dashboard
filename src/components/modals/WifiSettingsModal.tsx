@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Shield, Clock, Wifi, Loader2, Check, AlertTriangle, Save, Plus, Trash2 } from 'lucide-react';
+import { X, Shield, Clock, Wifi, Loader2, Check, AlertTriangle, Save, Plus, Trash2, ExternalLink } from 'lucide-react';
 import { api } from '../../api/client';
 import { API_ROUTES } from '../../utils/constants';
+import { useAuthStore } from '../../stores/authStore';
+import { getPermissionErrorMessage, getFreeboxSettingsUrl } from '../../utils/permissions';
 
 interface WifiSettingsModalProps {
   isOpen: boolean;
@@ -89,6 +91,10 @@ export const WifiSettingsModal: React.FC<WifiSettingsModalProps> = ({
   onClose,
   initialTab = 'filter'
 }) => {
+  // Get permissions from auth store
+  const { permissions, freeboxUrl } = useAuthStore();
+  const hasSettingsPermission = permissions.settings === true;
+
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -301,6 +307,27 @@ export const WifiSettingsModal: React.FC<WifiSettingsModalProps> = ({
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
+          {/* Permission warning */}
+          {!hasSettingsPermission && (
+            <div className="mb-4 p-4 bg-amber-900/20 border border-amber-700/50 rounded-xl">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="text-amber-400 flex-shrink-0 mt-0.5" size={20} />
+                <div className="flex-1">
+                  <p className="text-amber-400 text-sm">{getPermissionErrorMessage('settings')}</p>
+                  <a
+                    href={getFreeboxSettingsUrl(freeboxUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 mt-2 text-amber-300 hover:text-amber-200 text-sm underline"
+                  >
+                    Ouvrir les paramètres Freebox
+                    <ExternalLink size={12} />
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-400 text-sm flex items-center gap-2">
               <AlertTriangle size={16} />

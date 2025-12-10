@@ -32,3 +32,4 @@ dist-ssr
 
 # Claude Code
 .claude
+.reboot_schedule.json

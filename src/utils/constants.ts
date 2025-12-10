@@ -58,6 +58,7 @@ export const API_ROUTES = {
   // System
   SYSTEM: '/api/system',
   SYSTEM_REBOOT: '/api/system/reboot',
+  SYSTEM_REBOOT_SCHEDULE: '/api/system/reboot/schedule',
 
   // Connection
   CONNECTION: '/api/connection',

@@ -6,9 +6,21 @@ const router = Router();
 
 // GET /api/fs/list - List files in directory
 router.get('/list', asyncHandler(async (req, res) => {
-  const encodedPath = req.query.path as string || '/';
-  const path = decodeURIComponent(encodedPath);
+  // If no path provided, list root directory
+  // If path provided, it's already base64 encoded from Freebox API
+  const path = req.query.path ? decodeURIComponent(req.query.path as string) : '/';
   const result = await freeboxApi.listFiles(path);
+
+  // API v15+ returns an object with pagination instead of an array
+  // Normalize the response to always return an array for backward compatibility
+  if (result.success && result.result) {
+    const data = result.result as { entries?: unknown[]; [key: string]: unknown } | unknown[];
+    // If it's an object with 'entries' property (v15+ format), extract the array
+    if (data && typeof data === 'object' && !Array.isArray(data) && 'entries' in data) {
+      result.result = data.entries;
+    }
+  }
+
   res.json(result);
 }));
 

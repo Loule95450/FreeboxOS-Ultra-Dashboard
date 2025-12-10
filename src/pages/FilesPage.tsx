@@ -29,6 +29,8 @@ import {
 } from 'lucide-react';
 import { useFsStore, type FsFile } from '../stores/fsStore';
 import { useDownloadsStore } from '../stores';
+import { useAuthStore } from '../stores/authStore';
+import { PermissionBanner } from '../components/ui/PermissionBanner';
 import type { DownloadTask } from '../types';
 
 // Format file size
@@ -287,6 +289,11 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
     deleteDownload
   } = useDownloadsStore();
 
+  // Get permissions from auth store
+  const { permissions, freeboxUrl } = useAuthStore();
+  const hasExplorerPermission = permissions.explorer === true;
+  const hasDownloaderPermission = permissions.downloader === true;
+
   const [activeTab, setActiveTab] = useState<'files' | 'downloads'>('files');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [searchQuery, setSearchQuery] = useState('');
@@ -298,14 +305,9 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
     fetchStorage();
     fetchDisks();
     fetchDownloads();
-  }, [fetchStorage, fetchDisks, fetchDownloads]);
-
-  // Only fetch files if we have storage
-  useEffect(() => {
-    if (storage && storage.total_bytes > 0) {
-      listFiles('/');
-    }
-  }, [storage, listFiles]);
+    // Always try to list files on mount - the API will handle errors gracefully
+    listFiles('/');
+  }, [fetchStorage, fetchDisks, fetchDownloads, listFiles]);
 
   // Check if we have a disk available
   const hasDisk = (storage && storage.total_bytes > 0) || disks.length > 0;
@@ -445,8 +447,13 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
         {/* Files Tab */}
         {activeTab === 'files' && (
           <>
+            {/* Permission warning */}
+            {!hasExplorerPermission && (
+              <PermissionBanner permission="explorer" freeboxUrl={freeboxUrl} />
+            )}
+
             {/* No disk warning */}
-            {!hasDisk && (
+            {!hasDisk && hasExplorerPermission && (
               <div className="flex flex-col items-center justify-center py-16">
                 <HardDrive size={64} className="text-gray-600 mb-4" />
                 <h2 className="text-xl font-semibold text-white mb-2">Aucun disque détecté</h2>
@@ -597,6 +604,11 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
         {/* Downloads Tab */}
         {activeTab === 'downloads' && (
           <>
+            {/* Permission warning */}
+            {!hasDownloaderPermission && (
+              <PermissionBanner permission="downloader" freeboxUrl={freeboxUrl} />
+            )}
+
             <div className="flex items-center justify-between mb-4">
               <div className="text-sm text-gray-400">
                 {activeDownloads > 0 && (

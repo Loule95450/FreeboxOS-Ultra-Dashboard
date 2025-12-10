@@ -12,7 +12,8 @@ import {
   Fan,
   Server,
   ChevronLeft,
-  BarChart2
+  BarChart2,
+  AlertTriangle
 } from 'lucide-react';
 import {
   AreaChart,
@@ -38,6 +39,7 @@ import { useLanStore } from '../stores/lanStore';
 import { useUptimeStore } from '../stores/uptimeStore';
 import { useCapabilitiesStore } from '../stores/capabilitiesStore';
 import { formatSpeed, formatBitrate } from '../utils/constants';
+import type { SystemSensor, SystemFan } from '../types/api';
 
 type TimeRange = '1h' | '6h' | '24h' | '7d';
 
@@ -59,34 +61,107 @@ interface AnalyticsPageProps {
 }
 
 export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
-  const { status, history, extendedHistory, temperatureHistory, fetchExtendedHistory, fetchTemperatureHistory } = useConnectionStore();
+  const { status, history, extendedHistory, temperatureHistory, rrdPermissionDenied, fetchExtendedHistory, fetchTemperatureHistory } = useConnectionStore();
   const { info, temperatureHistory: systemTempHistory } = useSystemStore();
   const { networks } = useWifiStore();
   const { devices } = useLanStore();
   const { getHistoryForDisplay } = useUptimeStore();
   const { capabilities } = useCapabilitiesStore();
 
-  // Helper to get CPU temperature (works for all Freebox models)
-  // Ultra v9: Uses temp_cpu0-3 (4 CPU cores), returns average
-  // Other models: Use temp_cpum, temp_cpub, temp_sw (legacy fields)
-  const getCpuTemp = (): number | null => {
-    if (!info) return null;
+  // Helper to get CPU sensors (API v8+ format)
+  const getCpuSensors = (): SystemSensor[] => {
+    if (!info) return [];
 
-    // Ultra v9: average of 4 CPU cores
-    if (info.temp_cpu0 != null) {
-      const temps = [info.temp_cpu0, info.temp_cpu1, info.temp_cpu2, info.temp_cpu3]
-        .filter(t => t != null) as number[];
-      if (temps.length > 0) {
-        return Math.round(temps.reduce((a, b) => a + b, 0) / temps.length);
-      }
+    // API v8+: sensors array format
+    if (info.sensors && Array.isArray(info.sensors)) {
+      return info.sensors
+        .filter(s => s.id.startsWith('temp_cpu') || s.id.startsWith('cpu'))
+        .sort((a, b) => a.name.localeCompare(b.name));
     }
 
-    // Other models: legacy fields
-    if (info.temp_cpum != null && info.temp_cpum !== 0) return info.temp_cpum;
-    if (info.temp_cpub != null && info.temp_cpub !== 0) return info.temp_cpub;
-    if (info.temp_sw != null && info.temp_sw !== 0) return info.temp_sw;
-    return null;
+    // Legacy format: build sensors array from individual fields
+    const sensors: SystemSensor[] = [];
+    if (info.temp_cpu0 != null) sensors.push({ id: 'temp_cpu0', name: 'CPU 0', value: info.temp_cpu0 });
+    if (info.temp_cpu1 != null) sensors.push({ id: 'temp_cpu1', name: 'CPU 1', value: info.temp_cpu1 });
+    if (info.temp_cpu2 != null) sensors.push({ id: 'temp_cpu2', name: 'CPU 2', value: info.temp_cpu2 });
+    if (info.temp_cpu3 != null) sensors.push({ id: 'temp_cpu3', name: 'CPU 3', value: info.temp_cpu3 });
+    if (info.temp_cpum != null) sensors.push({ id: 'temp_cpum', name: 'CPU Main', value: info.temp_cpum });
+    if (info.temp_cpub != null) sensors.push({ id: 'temp_cpub', name: 'CPU Box', value: info.temp_cpub });
+
+    return sensors.sort((a, b) => a.name.localeCompare(b.name));
   };
+
+  // Helper to get HDD sensors (API v8+ format)
+  const getHddSensors = (): SystemSensor[] => {
+    if (!info) return [];
+
+    // API v8+: sensors array format
+    if (info.sensors && Array.isArray(info.sensors)) {
+      return info.sensors
+        .filter(s => s.id.startsWith('temp_hdd') || s.id.includes('disk'))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    return [];
+  };
+
+  // Helper to get other temperature sensors (switch, etc.)
+  const getOtherSensors = (): SystemSensor[] => {
+    if (!info) return [];
+
+    // API v8+: sensors array format
+    if (info.sensors && Array.isArray(info.sensors)) {
+      return info.sensors
+        .filter(s => !s.id.startsWith('temp_cpu') && !s.id.startsWith('cpu') && !s.id.startsWith('temp_hdd') && !s.id.includes('disk'))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    // Legacy format
+    const sensors: SystemSensor[] = [];
+    if (info.temp_sw != null) sensors.push({ id: 'temp_sw', name: 'Switch', value: info.temp_sw });
+
+    return sensors;
+  };
+
+  // Helper to get fans (API v8+ format)
+  const getFans = (): SystemFan[] => {
+    if (!info) return [];
+
+    // API v8+: fans array
+    if (info.fans && Array.isArray(info.fans)) {
+      return info.fans.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    // Legacy format: single fan_rpm field
+    if (info.fan_rpm != null) {
+      return [{ id: 'fan_rpm', name: 'Ventilateur', value: info.fan_rpm }];
+    }
+
+    return [];
+  };
+
+  // Helper to get average temperature from sensors
+  const getAvgTemp = (sensors: SystemSensor[]): number | null => {
+    if (sensors.length === 0) return null;
+    const avg = sensors.reduce((sum, s) => sum + s.value, 0) / sensors.length;
+    return Math.round(avg);
+  };
+
+  // Helper to get average fan RPM
+  const getAvgFanRpm = (fans: SystemFan[]): number | null => {
+    if (fans.length === 0) return null;
+    const avg = fans.reduce((sum, f) => sum + f.value, 0) / fans.length;
+    return Math.round(avg);
+  };
+
+  // Get all sensor data
+  const cpuSensors = getCpuSensors();
+  const hddSensors = getHddSensors();
+  const otherSensors = getOtherSensors();
+  const fans = getFans();
+  const cpuAvgTemp = getAvgTemp(cpuSensors);
+  const hddAvgTemp = getAvgTemp(hddSensors);
+  const fanAvgRpm = getAvgFanRpm(fans);
 
   // Get uptime data from store
   const uptimeHistory = getHistoryForDisplay();
@@ -276,35 +351,60 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
       {/* Bandwidth Tab */}
       {activeTab === 'bandwidth' && (
         <div className="space-y-6">
+          {/* Permission Warning */}
+          {rrdPermissionDenied && (
+            <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-orange-500 font-semibold">Permission insuffisante</h4>
+                <p className="text-gray-400 text-sm mt-1">
+                  La permission <span className="text-white font-medium">"Modification des réglages de la Freebox"</span> est
+                  nécessaire pour afficher les statistiques moyennes et maximales des débits.
+                </p>
+                <p className="text-gray-500 text-xs mt-2">
+                  Allez dans Freebox OS → Paramètres → Gestion des accès → Applications → Sélectionnez cette application et activez la permission.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
+            <div className={`bg-[#121212] rounded-xl p-4 border border-gray-800 ${rrdPermissionDenied ? 'opacity-50' : ''}`}>
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Download className="w-4 h-4 text-blue-500" />
                 Débit moyen ↓
               </div>
-              <div className="text-2xl font-bold text-white">{formatSpeed(bandwidthStats.avgDown * 1024)}</div>
+              <div className="text-2xl font-bold text-white">
+                {rrdPermissionDenied ? 'N/A' : formatSpeed(bandwidthStats.avgDown * 1024)}
+              </div>
             </div>
-            <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
+            <div className={`bg-[#121212] rounded-xl p-4 border border-gray-800 ${rrdPermissionDenied ? 'opacity-50' : ''}`}>
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Upload className="w-4 h-4 text-green-500" />
                 Débit moyen ↑
               </div>
-              <div className="text-2xl font-bold text-white">{formatSpeed(bandwidthStats.avgUp * 1024)}</div>
+              <div className="text-2xl font-bold text-white">
+                {rrdPermissionDenied ? 'N/A' : formatSpeed(bandwidthStats.avgUp * 1024)}
+              </div>
             </div>
-            <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
+            <div className={`bg-[#121212] rounded-xl p-4 border border-gray-800 ${rrdPermissionDenied ? 'opacity-50' : ''}`}>
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Zap className="w-4 h-4 text-blue-500" />
                 Débit max ↓
               </div>
-              <div className="text-2xl font-bold text-white">{formatSpeed(bandwidthStats.maxDown * 1024)}</div>
+              <div className="text-2xl font-bold text-white">
+                {rrdPermissionDenied ? 'N/A' : formatSpeed(bandwidthStats.maxDown * 1024)}
+              </div>
             </div>
-            <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
+            <div className={`bg-[#121212] rounded-xl p-4 border border-gray-800 ${rrdPermissionDenied ? 'opacity-50' : ''}`}>
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Zap className="w-4 h-4 text-green-500" />
                 Débit max ↑
               </div>
-              <div className="text-2xl font-bold text-white">{formatSpeed(bandwidthStats.maxUp * 1024)}</div>
+              <div className="text-2xl font-bold text-white">
+                {rrdPermissionDenied ? 'N/A' : formatSpeed(bandwidthStats.maxUp * 1024)}
+              </div>
             </div>
           </div>
 
@@ -412,91 +512,186 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
       {/* Temperature Tab */}
       {activeTab === 'temperature' && (
         <div className="space-y-6">
-          {/* Current Temps */}
-          <div className={`grid ${info?.temp_sw ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2 md:grid-cols-3'} gap-4`}>
+          {/* Current Temps - Dynamic grid based on available sensors */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* CPU Temperature */}
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Cpu className="w-4 h-4 text-orange-500" />
-                {info?.temp_cpu0 != null ? 'CPU (Moyenne)' : 'CPU Principal'}
+                CPU {cpuSensors.length > 1 ? '(Moyenne)' : ''}
               </div>
               <div className="text-2xl font-bold text-white">
-                {getCpuTemp() != null ? `${getCpuTemp()}°C` : 'N/A'}
+                {cpuAvgTemp != null ? `${cpuAvgTemp}°C` : 'N/A'}
               </div>
+              {cpuSensors.length > 1 && (
+                <div className="text-xs text-gray-500 mt-1">
+                  {cpuSensors.length} capteurs
+                </div>
+              )}
             </div>
-            {info?.temp_sw && (
+
+            {/* HDD Temperature */}
+            {hddSensors.length > 0 && (
               <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
                 <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
-                  <HardDrive className="w-4 h-4 text-cyan-500" />
-                  Switch
+                  <HardDrive className="w-4 h-4 text-blue-500" />
+                  Disque {hddSensors.length > 1 ? '(Moyenne)' : ''}
                 </div>
                 <div className="text-2xl font-bold text-white">
-                  {info.temp_sw}°C
+                  {hddAvgTemp != null ? `${hddAvgTemp}°C` : 'N/A'}
                 </div>
+                {hddSensors.length > 1 && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    {hddSensors.length} disques
+                  </div>
+                )}
               </div>
             )}
+
+            {/* Fan Speed */}
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
-                <Fan className="w-4 h-4 text-blue-500" />
-                Ventilateur
+                <Fan className="w-4 h-4 text-cyan-500" />
+                Ventilateur {fans.length > 1 ? '(Moyenne)' : ''}
               </div>
               <div className="text-2xl font-bold text-white">
-                {info?.fan_rpm ? `${info.fan_rpm} rpm` : 'N/A'}
+                {fanAvgRpm != null ? `${fanAvgRpm} T/min` : 'N/A'}
               </div>
+              {fans.length > 1 && (
+                <div className="text-xs text-gray-500 mt-1">
+                  {fans.length} ventilateurs
+                </div>
+              )}
             </div>
+
+            {/* Max CPU Temp */}
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Thermometer className="w-4 h-4 text-red-500" />
-                Temp Max
+                CPU Max
               </div>
               <div className="text-2xl font-bold text-white">
-                {tempStats.maxCpu ? `${tempStats.maxCpu}°C` : 'N/A'}
+                {cpuSensors.length > 0 ? `${Math.max(...cpuSensors.map(s => s.value))}°C` : 'N/A'}
               </div>
             </div>
           </div>
 
-          {/* Temperature Stats */}
-          <div className={`grid ${tempStats.avgSw > 0 ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
-            <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
-              <h3 className="text-lg font-semibold text-white mb-4">Statistiques CPU</h3>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400">Température moyenne</span>
-                  <span className="text-white font-semibold">{tempStats.avgCpu}°C</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400">Température maximale</span>
-                  <span className="text-orange-500 font-semibold">{tempStats.maxCpu}°C</span>
-                </div>
-                <div className="w-full bg-gray-800 rounded-full h-2 mt-2">
-                  <div
-                    className={`h-2 rounded-full transition-all ${
-                      tempStats.avgCpu > 70 ? 'bg-red-500' : tempStats.avgCpu > 50 ? 'bg-orange-500' : 'bg-green-500'
-                    }`}
-                    style={{ width: `${Math.min(100, (tempStats.avgCpu / 100) * 100)}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-            {tempStats.avgSw > 0 && (
+          {/* Detailed Sensors */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* CPU Sensors Detail */}
+            {cpuSensors.length > 0 && (
               <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
-                <h3 className="text-lg font-semibold text-white mb-4">Statistiques Switch</h3>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Température moyenne</span>
-                    <span className="text-white font-semibold">{tempStats.avgSw}°C</span>
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <Cpu className="w-5 h-5 text-orange-500" />
+                  Températures CPU
+                </h3>
+                <div className="space-y-3">
+                  {cpuSensors.map((sensor) => (
+                    <div key={sensor.id} className="flex justify-between items-center">
+                      <span className="text-gray-400">{sensor.name}</span>
+                      <span className={`font-semibold ${
+                        sensor.value > 70 ? 'text-red-500' : sensor.value > 50 ? 'text-orange-500' : 'text-green-500'
+                      }`}>
+                        {sensor.value}°C
+                      </span>
+                    </div>
+                  ))}
+                  <div className="pt-2 border-t border-gray-700">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500 text-sm">Moyenne</span>
+                      <span className="text-white font-semibold">{cpuAvgTemp}°C</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Température maximale</span>
-                    <span className="text-cyan-500 font-semibold">{tempStats.maxSw}°C</span>
+                  <div className="w-full bg-gray-800 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all ${
+                        (cpuAvgTemp || 0) > 70 ? 'bg-red-500' : (cpuAvgTemp || 0) > 50 ? 'bg-orange-500' : 'bg-green-500'
+                      }`}
+                      style={{ width: `${Math.min(100, ((cpuAvgTemp || 0) / 100) * 100)}%` }}
+                    />
                   </div>
-                <div className="w-full bg-gray-800 rounded-full h-2 mt-2">
-                  <div
-                    className="h-2 rounded-full bg-cyan-500 transition-all"
-                    style={{ width: `${Math.min(100, (tempStats.avgSw / 100) * 100)}%` }}
-                  />
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* HDD Sensors Detail */}
+            {hddSensors.length > 0 && (
+              <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <HardDrive className="w-5 h-5 text-blue-500" />
+                  Températures Disques
+                </h3>
+                <div className="space-y-3">
+                  {hddSensors.map((sensor) => (
+                    <div key={sensor.id} className="flex justify-between items-center">
+                      <span className="text-gray-400">{sensor.name}</span>
+                      <span className={`font-semibold ${
+                        sensor.value > 50 ? 'text-red-500' : sensor.value > 40 ? 'text-orange-500' : 'text-blue-500'
+                      }`}>
+                        {sensor.value}°C
+                      </span>
+                    </div>
+                  ))}
+                  {hddSensors.length > 1 && (
+                    <div className="pt-2 border-t border-gray-700">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500 text-sm">Moyenne</span>
+                        <span className="text-white font-semibold">{hddAvgTemp}°C</span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="w-full bg-gray-800 rounded-full h-2">
+                    <div
+                      className="h-2 rounded-full bg-blue-500 transition-all"
+                      style={{ width: `${Math.min(100, ((hddAvgTemp || 0) / 60) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Fans Detail */}
+            {fans.length > 0 && (
+              <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <Fan className="w-5 h-5 text-cyan-500" />
+                  Ventilateurs
+                </h3>
+                <div className="space-y-3">
+                  {fans.map((fan) => (
+                    <div key={fan.id} className="flex justify-between items-center">
+                      <span className="text-gray-400">{fan.name}</span>
+                      <span className="text-cyan-500 font-semibold">{fan.value} T/min</span>
+                    </div>
+                  ))}
+                  {fans.length > 1 && (
+                    <div className="pt-2 border-t border-gray-700">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500 text-sm">Moyenne</span>
+                        <span className="text-white font-semibold">{fanAvgRpm} T/min</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Other Sensors (if any) */}
+            {otherSensors.length > 0 && (
+              <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <Thermometer className="w-5 h-5 text-purple-500" />
+                  Autres capteurs
+                </h3>
+                <div className="space-y-3">
+                  {otherSensors.map((sensor) => (
+                    <div key={sensor.id} className="flex justify-between items-center">
+                      <span className="text-gray-400">{sensor.name}</span>
+                      <span className="text-purple-500 font-semibold">{sensor.value}°C</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 
@@ -524,14 +719,15 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                     labelStyle={{ color: '#9ca3af' }}
                     formatter={(value: number, name: string) => {
                       const labels: Record<string, string> = {
-                        cpuM: info?.temp_cpu0 != null ? 'CPU (Moyenne)' : 'CPU Principal',
-                        sw: 'Switch'
+                        cpuM: 'CPU (Moyenne)',
+                        sw: 'Switch',
+                        hdd: 'Disque'
                       };
                       return [`${value}°C`, labels[name] || name];
                     }}
                   />
                   <Legend />
-                  <Line type="monotone" dataKey="cpuM" stroke={COLORS.orange} name={info?.temp_cpu0 != null ? 'CPU (Moyenne)' : 'CPU Principal'} dot={false} />
+                  <Line type="monotone" dataKey="cpuM" stroke={COLORS.orange} name="CPU (Moyenne)" dot={false} />
                   {tempStats.avgSw > 0 && <Line type="monotone" dataKey="sw" stroke={COLORS.cyan} name="Switch" dot={false} />}
                 </LineChart>
               </ResponsiveContainer>

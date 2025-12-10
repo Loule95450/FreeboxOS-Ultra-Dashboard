@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { useVmStore } from '../stores';
 import { useCapabilitiesStore } from '../stores/capabilitiesStore';
+import { useAuthStore } from '../stores/authStore';
+import { PermissionBanner } from '../components/ui/PermissionBanner';
 import type { VM } from '../types';
 
 // Format bytes to human readable
@@ -364,6 +366,10 @@ export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
   // Get capabilities to check VM support
   const { supportsVm, hasLimitedVmSupport, getMaxVms, getModelName } = useCapabilitiesStore();
 
+  // Get permissions from auth store
+  const { permissions, freeboxUrl } = useAuthStore();
+  const hasVmPermission = permissions.vm === true;
+
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Fetch VMs on mount (only if supported)
@@ -504,6 +510,11 @@ export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
       </header>
 
       <main className="max-w-[1920px] mx-auto px-4 py-6 pb-24">
+        {/* Permission warning */}
+        {!hasVmPermission && (
+          <PermissionBanner permission="vm" freeboxUrl={freeboxUrl} />
+        )}
+
         {/* Error message */}
         {error && (
           <div className="mb-6 p-4 bg-red-900/20 border border-red-700/50 rounded-xl flex items-center gap-3">
