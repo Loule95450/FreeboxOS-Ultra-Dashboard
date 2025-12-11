@@ -40,6 +40,14 @@ export interface DiskInfo {
   }[];
 }
 
+export interface ShareLink {
+  token: string;
+  path: string;
+  name: string;
+  expire: number;
+  fullurl: string;
+}
+
 interface FsState {
   // Current directory content
   files: FsFile[];
@@ -48,6 +56,9 @@ interface FsState {
   // Storage info
   storage: StorageInfo | null;
   disks: DiskInfo[];
+
+  // Share links
+  shareLinks: ShareLink[];
 
   // UI State
   isLoading: boolean;
@@ -71,6 +82,10 @@ interface FsState {
   toggleSelectFile: (path: string) => void;
   clearSelection: () => void;
   selectAll: () => void;
+  // Share links
+  fetchShareLinks: () => Promise<void>;
+  createShareLink: (path: string, expireDays?: number) => Promise<ShareLink | null>;
+  deleteShareLink: (token: string) => Promise<boolean>;
 }
 
 export const useFsStore = create<FsState>((set, get) => ({
@@ -78,6 +93,7 @@ export const useFsStore = create<FsState>((set, get) => ({
   currentPath: '/',
   storage: null,
   disks: [],
+  shareLinks: [],
   isLoading: false,
   error: null,
   selectedFiles: [],
@@ -120,10 +136,26 @@ export const useFsStore = create<FsState>((set, get) => ({
     const { currentPath } = get();
     if (currentPath === '/') return;
 
-    const parts = currentPath.split('/').filter(Boolean);
-    parts.pop();
-    const newPath = '/' + parts.join('/');
-    await get().listFiles(newPath || '/');
+    try {
+      // Decode base64 path to get the real path
+      const decodedPath = decodeURIComponent(escape(atob(currentPath)));
+      // Split by / and remove the last segment
+      const parts = decodedPath.split('/').filter(Boolean);
+      parts.pop();
+
+      if (parts.length === 0) {
+        // Back to root
+        await get().listFiles('/');
+      } else {
+        // Re-encode the parent path
+        const parentPath = '/' + parts.join('/');
+        const encodedParentPath = btoa(unescape(encodeURIComponent(parentPath)));
+        await get().listFiles(encodedParentPath);
+      }
+    } catch {
+      // If decoding fails, try the old method or go to root
+      await get().listFiles('/');
+    }
   },
 
   getFileInfo: async (path: string) => {
@@ -153,13 +185,10 @@ export const useFsStore = create<FsState>((set, get) => ({
 
   rename: async (oldPath: string, newName: string) => {
     const { listFiles } = get();
-    // Construct new path
-    const parts = oldPath.split('/');
-    parts.pop();
-    const newPath = parts.join('/') + '/' + newName;
 
     try {
-      const response = await api.post(`${API_ROUTES.FS}/rename`, { src: oldPath, dst: newPath });
+      // src is base64 path, dst is just the new name (clear text)
+      const response = await api.post(`${API_ROUTES.FS}/rename`, { src: oldPath, dst: newName });
       if (response.success) {
         await listFiles();
         return true;
@@ -272,5 +301,55 @@ export const useFsStore = create<FsState>((set, get) => ({
   selectAll: () => {
     const { files } = get();
     set({ selectedFiles: files.map(f => f.path) });
+  },
+
+  // Share links
+  fetchShareLinks: async () => {
+    try {
+      const response = await api.get<ShareLink[]>(`${API_ROUTES.FS}/share`);
+      if (response.success && response.result) {
+        set({ shareLinks: response.result });
+      }
+    } catch {
+      // Silently fail
+    }
+  },
+
+  createShareLink: async (path: string, expireDays?: number) => {
+    try {
+      // Calculate expiration timestamp (days from now)
+      const expire = expireDays
+        ? Math.floor(Date.now() / 1000) + (expireDays * 24 * 60 * 60)
+        : 0; // 0 = no expiration
+
+      const response = await api.post<ShareLink>(`${API_ROUTES.FS}/share`, { path, expire });
+      if (response.success && response.result) {
+        // Refresh share links list
+        await get().fetchShareLinks();
+        return response.result;
+      }
+      set({ error: response.error?.message || 'Erreur lors de la création du lien de partage' });
+      return null;
+    } catch {
+      set({ error: 'Erreur lors de la création du lien de partage' });
+      return null;
+    }
+  },
+
+  deleteShareLink: async (token: string) => {
+    try {
+      const response = await api.delete(`${API_ROUTES.FS}/share/${encodeURIComponent(token)}`);
+      if (response.success) {
+        // Remove from local state immediately
+        const { shareLinks } = get();
+        set({ shareLinks: shareLinks.filter(link => link.token !== token) });
+        return true;
+      }
+      set({ error: response.error?.message || 'Erreur lors de la suppression du lien' });
+      return false;
+    } catch {
+      set({ error: 'Erreur lors de la suppression du lien' });
+      return false;
+    }
   }
 }));

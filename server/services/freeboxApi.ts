@@ -638,14 +638,17 @@ class FreeboxApiService {
     }
 
     async createDirectory(parent: string, dirname: string): Promise<FreeboxApiResponse> {
-        // Parent path is already base64 encoded
-        return this.request('POST', `${API_ENDPOINTS.FS_MKDIR}${parent}`, {dirname});
+        // Parent path should be base64 encoded
+        // If parent is '/' (root), we need to encode it
+        const encodedParent = (parent === '/' || parent === '')
+            ? Buffer.from('/').toString('base64')
+            : parent;
+        return this.request('POST', API_ENDPOINTS.FS_MKDIR, { parent: encodedParent, dirname });
     }
 
     async renameFile(src: string, dst: string): Promise<FreeboxApiResponse> {
-        // Src path is already base64 encoded, dst needs to be encoded
-        const encodedDst = Buffer.from(dst).toString('base64');
-        return this.request('POST', `${API_ENDPOINTS.FS_RENAME}${src}`, {dst: encodedDst});
+        // Src path is already base64 encoded, dst is the new name in clear text (no path)
+        return this.request('POST', API_ENDPOINTS.FS_RENAME, {src, dst});
     }
 
     async removeFiles(files: string[]): Promise<FreeboxApiResponse> {
@@ -1008,6 +1011,31 @@ class FreeboxApiService {
 
     async getNotifications(): Promise<FreeboxApiResponse> {
         return this.request('GET', API_ENDPOINTS.NOTIFICATIONS);
+    }
+
+    // ==================== FILE SHARING ====================
+
+    async getShareLinks(): Promise<FreeboxApiResponse> {
+        return this.request('GET', '/share_link/');
+    }
+
+    async getShareLink(token: string): Promise<FreeboxApiResponse> {
+        return this.request('GET', `/share_link/${token}`);
+    }
+
+    async createShareLink(path: string, expire?: number): Promise<FreeboxApiResponse> {
+        const body: { path: string; expire?: number; fullurl: string } = {
+            path,
+            fullurl: ''
+        };
+        if (expire) {
+            body.expire = expire;
+        }
+        return this.request('POST', '/share_link/', body);
+    }
+
+    async deleteShareLink(token: string): Promise<FreeboxApiResponse> {
+        return this.request('DELETE', `/share_link/${token}`);
     }
 }
 

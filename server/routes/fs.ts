@@ -95,4 +95,35 @@ router.get('/disks', asyncHandler(async (_req, res) => {
   res.json(result);
 }));
 
+// ==================== FILE SHARING ====================
+
+// GET /api/fs/share - Get all share links
+router.get('/share', asyncHandler(async (_req, res) => {
+  const result = await freeboxApi.getShareLinks();
+  res.json(result);
+}));
+
+// GET /api/fs/share/:token - Get share link by token
+router.get('/share/:token', asyncHandler(async (req, res) => {
+  const { token } = req.params;
+  const result = await freeboxApi.getShareLink(token);
+  res.json(result);
+}));
+
+// POST /api/fs/share - Create share link
+router.post('/share', asyncHandler(async (req, res) => {
+  const { path, expire } = req.body;
+  // path should be base64 encoded (as returned by Freebox API)
+  const decodedPath = path ? decodeURIComponent(path) : path;
+  const result = await freeboxApi.createShareLink(decodedPath, expire);
+  res.json(result);
+}));
+
+// DELETE /api/fs/share/:token - Delete share link
+router.delete('/share/:token', asyncHandler(async (req, res) => {
+  const { token } = req.params;
+  const result = await freeboxApi.deleteShareLink(token);
+  res.json(result);
+}));
+
 export default router;
