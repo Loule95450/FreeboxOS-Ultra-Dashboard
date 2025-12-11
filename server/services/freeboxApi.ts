@@ -105,9 +105,9 @@ class FreeboxApiService {
 
     // Build full API URL
     private buildUrl(endpoint: string, apiVersion = config.freebox.apiVersion): string {
-        // WiFi uses v2 API
-        const version = endpoint.startsWith('/wifi') ? 'v2' : apiVersion;
-        return `${this.baseUrl}/api/${version}${endpoint}`;
+        // All endpoints use v15 now (the latest API version)
+        // WiFi was previously v2 but is now supported in v15
+        return `${this.baseUrl}/api/${apiVersion}${endpoint}`;
     }
 
     // Make HTTP request to Freebox
