@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Folder,
   File,
@@ -25,13 +25,33 @@ import {
   ArrowUp,
   Play,
   Pause,
-  X
+  X,
+  MoreVertical,
+  Edit3,
+  Copy,
+  Move,
+  Share2,
+  Link,
+  Check,
+  Clock
 } from 'lucide-react';
-import { useFsStore, type FsFile } from '../stores/fsStore';
-import { useDownloadsStore } from '../stores';
+import { useFsStore, type FsFile, type ShareLink } from '../stores/fsStore';
+import { useDownloadsStore, useSystemStore } from '../stores';
 import { useAuthStore } from '../stores/authStore';
 import { PermissionBanner } from '../components/ui/PermissionBanner';
+import { ToastContainer, type ToastData } from '../components/ui/Toast';
 import type { DownloadTask } from '../types';
+
+// Map model to display name
+const getDisplayName = (model: string): string => {
+  switch (model) {
+    case 'ultra': return 'Freebox Ultra';
+    case 'delta': return 'Freebox Delta';
+    case 'pop': return 'Freebox Pop';
+    case 'revolution': return 'Freebox Revolution';
+    default: return 'Freebox';
+  }
+};
 
 // Format file size
 const formatSize = (bytes: number | undefined | null): string => {
@@ -54,6 +74,15 @@ const formatDate = (timestamp: number): string => {
     hour: '2-digit',
     minute: '2-digit'
   });
+};
+
+// Decode base64 path to readable string
+const decodeBase64Path = (encoded: string): string => {
+  try {
+    return decodeURIComponent(escape(atob(encoded)));
+  } catch {
+    return encoded;
+  }
 };
 
 // Get file icon based on mimetype
@@ -87,12 +116,22 @@ const getFileIconColor = (file: FsFile): string => {
 const FileItem: React.FC<{
   file: FsFile;
   isSelected: boolean;
+  isShared: boolean;
+  isRootFolder: boolean;
+  isParentDir: boolean;
   viewMode: 'grid' | 'list';
   onSelect: () => void;
   onOpen: () => void;
-}> = ({ file, isSelected, viewMode, onSelect, onOpen }) => {
+  onContextMenu: (e: React.MouseEvent) => void;
+  onRename: () => void;
+  onCopy: () => void;
+  onMove: () => void;
+  onShare: () => void;
+  onDelete: () => void;
+}> = ({ file, isSelected, isShared, isRootFolder, isParentDir, viewMode, onSelect, onOpen, onContextMenu, onRename, onCopy, onMove, onShare, onDelete }) => {
   const Icon = getFileIcon(file);
   const iconColor = getFileIconColor(file);
+  const [showMenu, setShowMenu] = useState(false);
 
   if (viewMode === 'grid') {
     return (
@@ -103,30 +142,84 @@ const FileItem: React.FC<{
             : 'bg-[#1a1a1a] border-transparent hover:border-gray-700 hover:bg-[#202020]'
         }`}
         onClick={(e) => {
-          if (e.ctrlKey || e.metaKey) {
+          if ((e.ctrlKey || e.metaKey) && !isParentDir) {
             onSelect();
           } else {
             onOpen();
           }
         }}
+        onContextMenu={isParentDir ? undefined : onContextMenu}
       >
-        <button
-          className={`absolute top-2 left-2 p-1 rounded transition-opacity ${
-            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          }`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect();
-          }}
-        >
-          {isSelected ? (
-            <CheckSquare size={16} className="text-blue-400" />
-          ) : (
-            <Square size={16} className="text-gray-500" />
-          )}
-        </button>
+        {!isParentDir && (
+          <button
+            className={`absolute top-2 left-2 p-1 rounded transition-opacity ${
+              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            }`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect();
+            }}
+          >
+            {isSelected ? (
+              <CheckSquare size={16} className="text-blue-400" />
+            ) : (
+              <Square size={16} className="text-gray-500" />
+            )}
+          </button>
+        )}
+        {/* Ellipsis menu button */}
+        {!isParentDir && (
+          <div className="absolute top-2 right-2">
+            <button
+              className={`p-1 rounded transition-opacity hover:bg-white/10 ${
+                showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowMenu(!showMenu);
+              }}
+            >
+              <MoreVertical size={16} className="text-gray-400" />
+            </button>
+            {showMenu && (
+              <div
+                className="absolute right-0 top-8 bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-50"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => { if (!isRootFolder) { onRename(); setShowMenu(false); } }}
+                  disabled={isRootFolder}
+                  className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${isRootFolder ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:bg-gray-800'}`}
+                >
+                  <Edit3 size={14} /> Renommer
+                </button>
+                <button onClick={() => { onCopy(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
+                  <Copy size={14} /> Copier
+                </button>
+                <button onClick={() => { onMove(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
+                  <Move size={14} /> Déplacer
+                </button>
+                <button onClick={() => { onShare(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-purple-400 hover:bg-gray-800 flex items-center gap-2">
+                  <Share2 size={14} /> Partager
+                </button>
+                <div className="border-t border-gray-700 my-1" />
+                <button onClick={() => { onDelete(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-gray-800 flex items-center gap-2">
+                  <Trash2 size={14} /> Supprimer
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {/* Shared indicator */}
+        {isShared && !isParentDir && (
+          <div className="absolute top-2 right-8 p-1" title="Partagé">
+            <Link size={14} className="text-purple-400" />
+          </div>
+        )}
         <div className="flex flex-col items-center gap-2">
-          <Icon size={40} className={iconColor} />
+          <div className="relative">
+            <Icon size={40} className={iconColor} />
+          </div>
           <span className="text-sm text-center text-white truncate w-full" title={file.name}>
             {file.name}
           </span>
@@ -146,38 +239,102 @@ const FileItem: React.FC<{
           : 'hover:bg-[#1a1a1a]'
       }`}
       onClick={(e) => {
-        if (e.ctrlKey || e.metaKey) {
+        if ((e.ctrlKey || e.metaKey) && !isParentDir) {
           onSelect();
         } else {
           onOpen();
         }
       }}
+      onContextMenu={isParentDir ? undefined : onContextMenu}
     >
-      <button
-        className={`p-1 rounded transition-opacity ${
-          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-        }`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onSelect();
-        }}
-      >
-        {isSelected ? (
-          <CheckSquare size={16} className="text-blue-400" />
-        ) : (
-          <Square size={16} className="text-gray-500" />
+      {!isParentDir ? (
+        <button
+          className={`p-1 rounded transition-opacity ${
+            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+        >
+          {isSelected ? (
+            <CheckSquare size={16} className="text-blue-400" />
+          ) : (
+            <Square size={16} className="text-gray-500" />
+          )}
+        </button>
+      ) : (
+        <div className="w-6" />
+      )}
+      <div className="relative">
+        <Icon size={20} className={iconColor} />
+        {isShared && !isParentDir && (
+          <div className="absolute -top-1 -right-1 bg-purple-500 rounded-full p-0.5" title="Partagé">
+            <Link size={8} className="text-white" />
+          </div>
         )}
-      </button>
-      <Icon size={20} className={iconColor} />
+      </div>
       <span className="flex-1 text-sm text-white truncate" title={file.name}>
         {file.name}
       </span>
-      <span className="text-xs text-gray-500 w-24 text-right">
-        {file.type === 'dir' ? `${file.filecount || 0} fichiers` : formatSize(file.size)}
-      </span>
-      <span className="text-xs text-gray-500 w-32 text-right hidden md:block">
-        {formatDate(file.modification)}
-      </span>
+      {isShared && !isParentDir && (
+        <span className="text-xs text-purple-400 hidden sm:block">Partagé</span>
+      )}
+      {!isParentDir && (
+        <span className="text-xs text-gray-500 w-24 text-right">
+          {file.type === 'dir' ? `${file.filecount || 0} fichiers` : formatSize(file.size)}
+        </span>
+      )}
+      {!isParentDir && (
+        <span className="text-xs text-gray-500 w-32 text-right hidden md:block">
+          {formatDate(file.modification)}
+        </span>
+      )}
+      {/* Ellipsis menu */}
+      {!isParentDir ? (
+        <div className="relative">
+          <button
+            className={`p-1 rounded transition-opacity hover:bg-white/10 ${
+              showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            }`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowMenu(!showMenu);
+            }}
+          >
+            <MoreVertical size={16} className="text-gray-400" />
+          </button>
+          {showMenu && (
+            <div
+              className="absolute right-0 top-8 bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-50"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => { if (!isRootFolder) { onRename(); setShowMenu(false); } }}
+                disabled={isRootFolder}
+                className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${isRootFolder ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:bg-gray-800'}`}
+              >
+                <Edit3 size={14} /> Renommer
+              </button>
+              <button onClick={() => { onCopy(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
+                <Copy size={14} /> Copier
+              </button>
+              <button onClick={() => { onMove(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
+                <Move size={14} /> Déplacer
+              </button>
+              <button onClick={() => { onShare(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-purple-400 hover:bg-gray-800 flex items-center gap-2">
+                <Share2 size={14} /> Partager
+              </button>
+              <div className="border-t border-gray-700 my-1" />
+              <button onClick={() => { onDelete(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-gray-800 flex items-center gap-2">
+                <Trash2 size={14} /> Supprimer
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="w-6" />
+      )}
     </div>
   );
 };
@@ -268,12 +425,19 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
     isLoading,
     error,
     selectedFiles,
+    shareLinks,
     listFiles,
     navigateTo,
     navigateUp,
     createDirectory,
     deleteFiles,
+    copyFiles,
+    moveFiles,
+    rename,
     fetchDisks,
+    fetchShareLinks,
+    createShareLink,
+    deleteShareLink,
     toggleSelectFile,
     clearSelection,
     selectAll
@@ -292,19 +456,72 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
   const hasExplorerPermission = permissions.explorer === true;
   const hasDownloaderPermission = permissions.downloader === true;
 
-  const [activeTab, setActiveTab] = useState<'files' | 'downloads'>('files');
+  // Get box name from system store
+  const { info: systemInfo } = useSystemStore();
+  const boxName = getDisplayName(systemInfo?.model_info?.name || systemInfo?.board_name || '');
+
+  const [activeTab, setActiveTab] = useState<'files' | 'downloads' | 'shares'>('files');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
+  // Modal states for file operations
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<FsFile | null>(null);
+  const [newName, setNewName] = useState('');
+
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [destinationPath, setDestinationPath] = useState('');
+  const [browserPath, setBrowserPath] = useState('/');
+  const [browserFiles, setBrowserFiles] = useState<FsFile[]>([]);
+  const [browserLoading, setBrowserLoading] = useState(false);
+
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareTarget, setShareTarget] = useState<FsFile | null>(null);
+  const [shareExpireDays, setShareExpireDays] = useState<number>(7);
+  const [createdShareLink, setCreatedShareLink] = useState<ShareLink | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FsFile } | null>(null);
+
+  // Toast notifications
+  const [toasts, setToasts] = useState<ToastData[]>([]);
+
+  const addToast = (type: ToastData['type'], message: string, id?: string, progress?: number) => {
+    const toastId = id || Date.now().toString();
+    setToasts(prev => {
+      // Update existing toast if id matches
+      const existing = prev.find(t => t.id === toastId);
+      if (existing) {
+        return prev.map(t => t.id === toastId ? { ...t, type, message, progress } : t);
+      }
+      return [...prev, { id: toastId, type, message, progress }];
+    });
+    return toastId;
+  };
+
+  const removeToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
   // Fetch data on mount
   useEffect(() => {
     fetchDisks();
     fetchDownloads();
+    fetchShareLinks();
     // Always try to list files on mount - the API will handle errors gracefully
     listFiles('/');
-  }, [fetchDisks, fetchDownloads, listFiles]);
+  }, [fetchDisks, fetchDownloads, fetchShareLinks, listFiles]);
+
+  // Close context menu on click outside
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, []);
 
   // Check if we have a disk available
   const hasDisk = disks.length > 0;
@@ -320,26 +537,112 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
     return acc + partitionUsed;
   }, 0);
 
-  // Filter files by search
+  // Filter files by search (exclude . directory, keep .. for navigation except at root)
   const filteredFiles = files.filter(file =>
+    file.name !== '.' &&
+    !(file.name === '..' && currentPath === '/') &&
     file.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Path breadcrumbs
-  const pathParts = currentPath.split('/').filter(Boolean);
+  // Path breadcrumbs - decode base64 path and split into parts
+  const pathParts: { name: string; encodedPath: string }[] = (() => {
+    if (currentPath === '/') return [];
+    try {
+      const decodedPath = decodeBase64Path(currentPath);
+      const parts = decodedPath.split('/').filter(Boolean);
+      return parts.map((name, i) => {
+        // Build the path up to this point and encode it
+        const pathUpToHere = '/' + parts.slice(0, i + 1).join('/');
+        const encodedPath = btoa(unescape(encodeURIComponent(pathUpToHere)));
+        return { name, encodedPath };
+      });
+    } catch {
+      return [];
+    }
+  })();
 
   // Handle file/folder open
   const handleOpen = (file: FsFile) => {
     if (file.type === 'dir') {
-      navigateTo(file.path);
+      if (file.name === '..') {
+        navigateUp();
+      } else {
+        navigateTo(file.path);
+      }
     }
     // For files, could open preview or download
+  };
+
+  // Check if a file is shared
+  const isFileShared = useCallback((filePath: string): boolean => {
+    return shareLinks.some(link => link.path === filePath);
+  }, [shareLinks]);
+
+  // Check if file is a root level folder (disk)
+  const isRootLevelFolder = (filePath: string): boolean => {
+    try {
+      const decodedPath = decodeBase64Path(filePath);
+      // Root level folders have only one segment (e.g., "/Disque 1")
+      const parts = decodedPath.split('/').filter(Boolean);
+      return parts.length === 1;
+    } catch {
+      return false;
+    }
+  };
+
+  // Single file actions
+  const handleSingleFileRename = (file: FsFile) => {
+    if (isRootLevelFolder(file.path)) {
+      addToast('warning', 'Impossible de renommer un disque');
+      return;
+    }
+    setRenameTarget(file);
+    setNewName(file.name);
+    setShowRenameModal(true);
+  };
+
+  const handleSingleFileCopy = (file: FsFile) => {
+    clearSelection();
+    toggleSelectFile(file.path);
+    openCopyModal();
+  };
+
+  const handleSingleFileMove = (file: FsFile) => {
+    clearSelection();
+    toggleSelectFile(file.path);
+    openMoveModal();
+  };
+
+  const handleSingleFileShare = (file: FsFile) => {
+    setShareTarget(file);
+    setCreatedShareLink(null);
+    setShowShareModal(true);
+  };
+
+  const handleSingleFileDelete = async (file: FsFile) => {
+    if (confirm(`Supprimer "${file.name}" ?`)) {
+      const toastId = addToast('loading', `Suppression de "${file.name}"...`);
+      const success = await deleteFiles([file.path]);
+      removeToast(toastId);
+      if (success) {
+        addToast('success', `"${file.name}" supprimé`);
+      } else {
+        addToast('error', 'Erreur lors de la suppression');
+      }
+    }
   };
 
   // Handle create folder
   const handleCreateFolder = async () => {
     if (newFolderName.trim()) {
-      await createDirectory(newFolderName.trim());
+      const toastId = addToast('loading', 'Création du dossier...');
+      const success = await createDirectory(newFolderName.trim());
+      removeToast(toastId);
+      if (success) {
+        addToast('success', `Dossier "${newFolderName.trim()}" créé`);
+      } else {
+        addToast('error', 'Erreur lors de la création du dossier');
+      }
       setNewFolderName('');
       setShowNewFolderModal(false);
     }
@@ -347,9 +650,193 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
 
   // Handle delete selected
   const handleDeleteSelected = async () => {
-    if (selectedFiles.length > 0 && confirm(`Supprimer ${selectedFiles.length} élément(s) ?`)) {
-      await deleteFiles(selectedFiles);
+    const count = selectedFiles.length;
+    if (count > 0 && confirm(`Supprimer ${count} élément(s) ?`)) {
+      const toastId = addToast('loading', `Suppression de ${count} élément(s)...`);
+      const success = await deleteFiles(selectedFiles);
+      removeToast(toastId);
+      if (success) {
+        addToast('success', `${count} élément(s) supprimé(s)`);
+      } else {
+        addToast('error', 'Erreur lors de la suppression');
+      }
     }
+  };
+
+  // Handle rename
+  const handleRename = async () => {
+    if (renameTarget && newName.trim()) {
+      const toastId = addToast('loading', 'Renommage en cours...');
+      const success = await rename(renameTarget.path, newName.trim());
+      removeToast(toastId);
+      if (success) {
+        addToast('success', `"${renameTarget.name}" renommé en "${newName.trim()}"`);
+      } else {
+        addToast('error', 'Erreur lors du renommage');
+      }
+      setRenameTarget(null);
+      setNewName('');
+      setShowRenameModal(false);
+    }
+  };
+
+  // Handle copy
+  const handleCopy = async () => {
+    // browserPath must be a valid base64 path (not '/' which is just a UI marker for root listing)
+    if (selectedFiles.length > 0 && browserPath && browserPath !== '/') {
+      const count = selectedFiles.length;
+      const dest = destinationPath;
+      const filesToCopy = [...selectedFiles];
+      const destPath = browserPath;
+
+      setShowCopyModal(false);
+      setDestinationPath('');
+      setBrowserPath('/');
+      clearSelection();
+
+      const toastId = addToast('loading', `Copie de ${count} élément(s) en cours...`);
+      // Use destPath (base64 encoded) for the API
+      const success = await copyFiles(filesToCopy, destPath);
+      removeToast(toastId);
+      if (success) {
+        addToast('success', `${count} élément(s) copié(s) vers ${dest}`);
+      } else {
+        addToast('error', 'Erreur lors de la copie');
+      }
+    }
+  };
+
+  // Handle move
+  const handleMove = async () => {
+    // browserPath must be a valid base64 path (not '/' which is just a UI marker for root listing)
+    if (selectedFiles.length > 0 && browserPath && browserPath !== '/') {
+      const count = selectedFiles.length;
+      const dest = destinationPath;
+      const filesToMove = [...selectedFiles];
+      const destPath = browserPath;
+
+      setShowMoveModal(false);
+      setDestinationPath('');
+      setBrowserPath('/');
+      clearSelection();
+
+      const toastId = addToast('loading', `Déplacement de ${count} élément(s) en cours...`);
+      // Use browserPath (base64 encoded) for the API
+      const success = await moveFiles(filesToMove, destPath);
+      removeToast(toastId);
+      if (success) {
+        addToast('success', `${count} élément(s) déplacé(s) vers ${dest}`);
+      } else {
+        addToast('error', 'Erreur lors du déplacement');
+      }
+    }
+  };
+
+  // Handle share
+  const handleShare = async () => {
+    if (shareTarget) {
+      const link = await createShareLink(shareTarget.path, shareExpireDays || undefined);
+      if (link) {
+        setCreatedShareLink(link);
+      }
+    }
+  };
+
+  // Copy link to clipboard
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      // Fallback for older browsers
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    }
+  };
+
+  // Open context menu
+  const handleContextMenu = (e: React.MouseEvent, file: FsFile) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const menuWidth = 180;
+    const menuHeight = 250;
+
+    // Adjust position to stay within viewport
+    let x = e.clientX;
+    let y = e.clientY;
+
+    if (x + menuWidth > window.innerWidth) {
+      x = window.innerWidth - menuWidth - 10;
+    }
+    if (y + menuHeight > window.innerHeight) {
+      y = window.innerHeight - menuHeight - 10;
+    }
+
+    setContextMenu({ x, y, file });
+  };
+
+  // Browser for destination selection
+  const loadBrowserFiles = async (path: string) => {
+    setBrowserLoading(true);
+    try {
+      const url = (path === '/' || path === '')
+        ? '/api/fs/list'
+        : `/api/fs/list?path=${encodeURIComponent(path)}`;
+      const response = await fetch(url);
+      const data = await response.json();
+      if (data.success && data.result) {
+        // Only show directories
+        const dirs = data.result.filter((f: FsFile) => f.type === 'dir');
+        setBrowserFiles(dirs);
+        // For root, we store '/' as a marker, but for operations we'll need to select a subfolder
+        setBrowserPath(path);
+        // Set destination path (decoded for display)
+        if (path === '/') {
+          setDestinationPath('/');
+        } else {
+          setDestinationPath(decodeBase64Path(path));
+        }
+      }
+    } catch {
+      setBrowserFiles([]);
+    }
+    setBrowserLoading(false);
+  };
+
+  const browserNavigateUp = async () => {
+    if (browserPath === '/') return;
+    try {
+      const decodedPath = decodeBase64Path(browserPath);
+      const parts = decodedPath.split('/').filter(Boolean);
+      parts.pop();
+      if (parts.length === 0) {
+        await loadBrowserFiles('/');
+      } else {
+        const parentPath = '/' + parts.join('/');
+        const encodedParentPath = btoa(unescape(encodeURIComponent(parentPath)));
+        await loadBrowserFiles(encodedParentPath);
+      }
+    } catch {
+      await loadBrowserFiles('/');
+    }
+  };
+
+  const openCopyModal = () => {
+    setShowCopyModal(true);
+    loadBrowserFiles('/');
+  };
+
+  const openMoveModal = () => {
+    setShowMoveModal(true);
+    loadBrowserFiles('/');
   };
 
   // Active downloads count
@@ -441,6 +928,22 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
                 )}
               </span>
             </button>
+            <button
+              onClick={() => {
+                setActiveTab('shares');
+                fetchShareLinks();
+              }}
+              className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                activeTab === 'shares'
+                  ? 'text-purple-400 border-purple-400'
+                  : 'text-gray-400 border-transparent hover:text-white'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Link size={16} />
+                Partages ({shareLinks.length})
+              </span>
+            </button>
           </div>
         </div>
 
@@ -477,24 +980,31 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
                 {/* Toolbar */}
                 <div className="flex items-center justify-between gap-4 mb-4">
               {/* Breadcrumbs */}
-              <div className="flex items-center gap-1 overflow-x-auto">
+              <div className="flex items-center gap-1 overflow-x-auto flex-grow">
                 <button
                   onClick={() => navigateTo('/')}
-                  className="p-2 hover:bg-gray-800 rounded-lg transition-colors flex-shrink-0"
+                  className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-800 rounded-lg transition-colors flex-shrink-0"
                 >
                   <Home size={16} />
+                  <span className="text-sm text-gray-300">{boxName}</span>
                 </button>
-                {pathParts.map((part, i) => (
-                  <React.Fragment key={i}>
-                    <ChevronRight size={14} className="text-gray-600 flex-shrink-0" />
-                    <button
-                      onClick={() => navigateTo('/' + pathParts.slice(0, i + 1).join('/'))}
-                      className="px-2 py-1 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded transition-colors truncate max-w-32"
-                    >
-                      {part}
-                    </button>
-                  </React.Fragment>
-                ))}
+                {pathParts.map((part, i) => {
+                  const isPartShared = isFileShared(part.encodedPath);
+                  return (
+                    <React.Fragment key={i}>
+                      <ChevronRight size={14} className="text-gray-600 flex-shrink-0" />
+                      <button
+                        onClick={() => navigateTo(part.encodedPath)}
+                        className={`px-2 py-1 text-sm hover:text-white hover:bg-gray-800 rounded transition-colors truncate max-w-48 flex items-center gap-1 ${
+                          isPartShared ? 'text-purple-400' : 'text-gray-300'
+                        }`}
+                      >
+                        {part.name}
+                        {isPartShared && <Link size={12} className="flex-shrink-0" />}
+                      </button>
+                    </React.Fragment>
+                  );
+                })}
               </div>
 
               {/* Actions */}
@@ -553,8 +1063,58 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
                       onClick={clearSelection}
                       className="px-3 py-1.5 text-xs text-gray-400 hover:text-white transition-colors"
                     >
-                      Désélectionner
+                      Annuler
                     </button>
+                    {selectedFiles.length === 1 && !isRootLevelFolder(selectedFiles[0]) && (
+                      <button
+                        onClick={() => {
+                          const file = files.find(f => f.path === selectedFiles[0]);
+                          if (file) {
+                            setRenameTarget(file);
+                            setNewName(file.name);
+                            setShowRenameModal(true);
+                          }
+                        }}
+                        className="flex items-center gap-2 px-3 py-1.5 text-xs bg-[#1a1a1a] hover:bg-[#252525] border border-gray-700 rounded-lg transition-colors"
+                        title="Renommer"
+                      >
+                        <Edit3 size={14} />
+                        Renommer
+                      </button>
+                    )}
+                    <button
+                      onClick={openCopyModal}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs bg-[#1a1a1a] hover:bg-[#252525] border border-gray-700 rounded-lg transition-colors"
+                      title="Copier"
+                    >
+                      <Copy size={14} />
+                      Copier
+                    </button>
+                    <button
+                      onClick={openMoveModal}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs bg-[#1a1a1a] hover:bg-[#252525] border border-gray-700 rounded-lg transition-colors"
+                      title="Déplacer"
+                    >
+                      <Move size={14} />
+                      Déplacer
+                    </button>
+                    {selectedFiles.length === 1 && (
+                      <button
+                        onClick={() => {
+                          const file = files.find(f => f.path === selectedFiles[0]);
+                          if (file) {
+                            setShareTarget(file);
+                            setCreatedShareLink(null);
+                            setShowShareModal(true);
+                          }
+                        }}
+                        className="flex items-center gap-2 px-3 py-1.5 text-xs bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 rounded-lg transition-colors"
+                        title="Partager"
+                      >
+                        <Share2 size={14} />
+                        Partager
+                      </button>
+                    )}
                     <button
                       onClick={handleDeleteSelected}
                       className="flex items-center gap-2 px-3 py-1.5 text-xs bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg transition-colors"
@@ -589,9 +1149,18 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
                     key={file.path}
                     file={file}
                     isSelected={selectedFiles.includes(file.path)}
+                    isShared={isFileShared(file.path)}
+                    isRootFolder={isRootLevelFolder(file.path)}
+                    isParentDir={file.name === '..'}
                     viewMode={viewMode}
                     onSelect={() => toggleSelectFile(file.path)}
                     onOpen={() => handleOpen(file)}
+                    onContextMenu={(e) => handleContextMenu(e, file)}
+                    onRename={() => handleSingleFileRename(file)}
+                    onCopy={() => handleSingleFileCopy(file)}
+                    onMove={() => handleSingleFileMove(file)}
+                    onShare={() => handleSingleFileShare(file)}
+                    onDelete={() => handleSingleFileDelete(file)}
                   />
                 ))}
               </div>
@@ -660,6 +1229,85 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
           </>
         )}
 
+        {/* Shares Tab */}
+        {activeTab === 'shares' && (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-sm text-gray-400">
+                {shareLinks.length > 0 && (
+                  <span>{shareLinks.length} lien(s) de partage actif(s)</span>
+                )}
+              </div>
+              <button
+                onClick={() => fetchShareLinks()}
+                className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+                title="Actualiser"
+              >
+                <RefreshCw size={16} />
+              </button>
+            </div>
+
+            {shareLinks.length > 0 ? (
+              <div className="space-y-2">
+                {shareLinks.map((link) => (
+                  <div key={link.token} className="bg-[#1a1a1a] rounded-lg p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-purple-500/20">
+                        <Link size={16} className="text-purple-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm text-white truncate">{link.name}</h4>
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                          {link.expire > 0 ? (
+                            <>
+                              <Clock size={12} />
+                              <span>Expire le {formatDate(link.expire)}</span>
+                            </>
+                          ) : (
+                            <span>Pas d'expiration</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => copyToClipboard(link.fullurl)}
+                          className="flex items-center gap-2 px-3 py-1.5 text-xs bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 rounded-lg transition-colors"
+                        >
+                          {linkCopied ? <Check size={14} /> : <Copy size={14} />}
+                          {linkCopied ? 'Copié !' : 'Copier le lien'}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (confirm('Supprimer ce lien de partage ?')) {
+                              await deleteShareLink(link.token);
+                            }
+                          }}
+                          className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                    {link.fullurl && (
+                      <div className="mt-3 p-2 bg-[#0a0a0a] rounded-lg">
+                        <p className="text-xs text-gray-400 font-mono truncate">{link.fullurl}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16">
+                <Link size={48} className="text-gray-600 mb-4" />
+                <h3 className="text-lg font-medium text-white mb-2">Aucun lien de partage</h3>
+                <p className="text-gray-500 text-center max-w-md">
+                  Sélectionnez un fichier ou dossier dans l'explorateur et cliquez sur "Partager" pour créer un lien.
+                </p>
+              </div>
+            )}
+          </>
+        )}
+
         {/* New Folder Modal */}
         {showNewFolderModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -695,7 +1343,374 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
             </div>
           </div>
         )}
+
+        {/* Rename Modal */}
+        {showRenameModal && renameTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-[#121212] rounded-xl border border-gray-800 p-6 w-full max-w-md">
+              <h3 className="text-lg font-semibold text-white mb-4">Renommer</h3>
+              <p className="text-sm text-gray-400 mb-4">Renommer "{renameTarget.name}"</p>
+              <input
+                type="text"
+                placeholder="Nouveau nom"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleRename()}
+                className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500"
+                autoFocus
+              />
+              <div className="flex justify-end gap-2 mt-4">
+                <button
+                  onClick={() => {
+                    setRenameTarget(null);
+                    setNewName('');
+                    setShowRenameModal(false);
+                  }}
+                  className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleRename}
+                  disabled={!newName.trim() || newName === renameTarget.name}
+                  className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                >
+                  Renommer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Copy Modal */}
+        {showCopyModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-[#121212] rounded-xl border border-gray-800 p-6 w-full max-w-lg">
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <Copy size={20} className="text-blue-400" />
+                Copier {selectedFiles.length} élément(s)
+              </h3>
+
+              {/* Destination path display */}
+              <div className="mb-4 p-3 bg-[#1a1a1a] rounded-lg">
+                <p className="text-xs text-gray-500 mb-1">Destination :</p>
+                <p className="text-sm text-white font-mono">{destinationPath || '/'}</p>
+              </div>
+
+              {/* Folder browser */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <button
+                    onClick={() => loadBrowserFiles('/')}
+                    className="p-1.5 hover:bg-gray-700 rounded transition-colors"
+                    title="Racine"
+                  >
+                    <Home size={14} />
+                  </button>
+                  <button
+                    onClick={browserNavigateUp}
+                    disabled={browserPath === '/'}
+                    className="p-1.5 hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
+                    title="Dossier parent"
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <span className="text-xs text-gray-400 truncate flex-1">
+                    {browserPath === '/' ? '/' : decodeBase64Path(browserPath)}
+                  </span>
+                </div>
+                <div className="h-48 overflow-y-auto bg-[#0a0a0a] rounded-lg border border-gray-700">
+                  {browserLoading ? (
+                    <div className="flex items-center justify-center h-full">
+                      <Loader2 size={20} className="text-blue-400 animate-spin" />
+                    </div>
+                  ) : browserFiles.length > 0 ? (
+                    <div className="p-1">
+                      {browserFiles.map((file) => (
+                        <button
+                          key={file.path}
+                          onClick={() => loadBrowserFiles(file.path)}
+                          className="w-full flex items-center gap-2 p-2 hover:bg-gray-800 rounded text-left transition-colors"
+                        >
+                          <Folder size={16} className="text-yellow-400 flex-shrink-0" />
+                          <span className="text-sm text-white truncate">{file.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+                      Aucun sous-dossier
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {browserPath === '/' && (
+                <p className="text-xs text-amber-400 mb-3">Sélectionnez un dossier de destination</p>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setDestinationPath('');
+                    setShowCopyModal(false);
+                  }}
+                  className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleCopy}
+                  disabled={browserPath === '/'}
+                  className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                >
+                  Copier ici
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Move Modal */}
+        {showMoveModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-[#121212] rounded-xl border border-gray-800 p-6 w-full max-w-lg">
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <Move size={20} className="text-blue-400" />
+                Déplacer {selectedFiles.length} élément(s)
+              </h3>
+
+              {/* Destination path display */}
+              <div className="mb-4 p-3 bg-[#1a1a1a] rounded-lg">
+                <p className="text-xs text-gray-500 mb-1">Destination :</p>
+                <p className="text-sm text-white font-mono">{destinationPath || '/'}</p>
+              </div>
+
+              {/* Folder browser */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <button
+                    onClick={() => loadBrowserFiles('/')}
+                    className="p-1.5 hover:bg-gray-700 rounded transition-colors"
+                    title="Racine"
+                  >
+                    <Home size={14} />
+                  </button>
+                  <button
+                    onClick={browserNavigateUp}
+                    disabled={browserPath === '/'}
+                    className="p-1.5 hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
+                    title="Dossier parent"
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <span className="text-xs text-gray-400 truncate flex-1">
+                    {browserPath === '/' ? '/' : decodeBase64Path(browserPath)}
+                  </span>
+                </div>
+                <div className="h-48 overflow-y-auto bg-[#0a0a0a] rounded-lg border border-gray-700">
+                  {browserLoading ? (
+                    <div className="flex items-center justify-center h-full">
+                      <Loader2 size={20} className="text-blue-400 animate-spin" />
+                    </div>
+                  ) : browserFiles.length > 0 ? (
+                    <div className="p-1">
+                      {browserFiles.map((file) => (
+                        <button
+                          key={file.path}
+                          onClick={() => loadBrowserFiles(file.path)}
+                          className="w-full flex items-center gap-2 p-2 hover:bg-gray-800 rounded text-left transition-colors"
+                        >
+                          <Folder size={16} className="text-yellow-400 flex-shrink-0" />
+                          <span className="text-sm text-white truncate">{file.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+                      Aucun sous-dossier
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {browserPath === '/' && (
+                <p className="text-xs text-amber-400 mb-3">Sélectionnez un dossier de destination</p>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setDestinationPath('');
+                    setShowMoveModal(false);
+                  }}
+                  className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleMove}
+                  disabled={browserPath === '/'}
+                  className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                >
+                  Déplacer ici
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Share Modal */}
+        {showShareModal && shareTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-[#121212] rounded-xl border border-gray-800 p-6 w-full max-w-md">
+              <h3 className="text-lg font-semibold text-white mb-4">
+                <span className="flex items-center gap-2">
+                  <Share2 size={20} className="text-purple-400" />
+                  Partager "{shareTarget.name}"
+                </span>
+              </h3>
+
+              {!createdShareLink ? (
+                <>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Créez un lien de partage public pour ce {shareTarget.type === 'dir' ? 'dossier' : 'fichier'}.
+                  </p>
+
+                  <div className="mb-4">
+                    <label className="block text-sm text-gray-400 mb-2">Expiration du lien :</label>
+                    <select
+                      value={shareExpireDays}
+                      onChange={(e) => setShareExpireDays(Number(e.target.value))}
+                      className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                    >
+                      <option value={0}>Jamais</option>
+                      <option value={1}>1 jour</option>
+                      <option value={7}>7 jours</option>
+                      <option value={30}>30 jours</option>
+                      <option value={90}>90 jours</option>
+                    </select>
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => {
+                        setShareTarget(null);
+                        setCreatedShareLink(null);
+                        setShowShareModal(false);
+                      }}
+                      className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      onClick={handleShare}
+                      className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
+                    >
+                      Créer le lien
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mb-4 p-4 bg-emerald-900/20 border border-emerald-700/50 rounded-lg">
+                    <div className="flex items-center gap-2 text-emerald-400 mb-2">
+                      <Check size={16} />
+                      <span className="text-sm font-medium">Lien créé avec succès !</span>
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="block text-sm text-gray-400 mb-2">Lien de partage :</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={createdShareLink.fullurl}
+                        readOnly
+                        className="flex-1 px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm font-mono"
+                      />
+                      <button
+                        onClick={() => copyToClipboard(createdShareLink.fullurl)}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
+                      >
+                        {linkCopied ? <Check size={16} /> : <Copy size={16} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {createdShareLink.expire > 0 && (
+                    <p className="text-xs text-gray-500 mb-4">
+                      Expire le {formatDate(createdShareLink.expire)}
+                    </p>
+                  )}
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => {
+                        setShareTarget(null);
+                        setCreatedShareLink(null);
+                        setShowShareModal(false);
+                        clearSelection();
+                      }}
+                      className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                    >
+                      Fermer
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </main>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="fixed bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[180px] z-[200]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 border-b border-gray-700">
+            <p className="text-xs text-gray-400 truncate max-w-[160px]">{contextMenu.file.name}</p>
+          </div>
+          <button
+            onClick={() => { if (!isRootLevelFolder(contextMenu.file.path)) { handleSingleFileRename(contextMenu.file); setContextMenu(null); } }}
+            disabled={isRootLevelFolder(contextMenu.file.path)}
+            className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${isRootLevelFolder(contextMenu.file.path) ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:bg-gray-800'}`}
+          >
+            <Edit3 size={14} /> Renommer
+          </button>
+          <button
+            onClick={() => { handleSingleFileCopy(contextMenu.file); setContextMenu(null); }}
+            className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2"
+          >
+            <Copy size={14} /> Copier
+          </button>
+          <button
+            onClick={() => { handleSingleFileMove(contextMenu.file); setContextMenu(null); }}
+            className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2"
+          >
+            <Move size={14} /> Déplacer
+          </button>
+          <button
+            onClick={() => { handleSingleFileShare(contextMenu.file); setContextMenu(null); }}
+            className="w-full px-3 py-2 text-left text-sm text-purple-400 hover:bg-gray-800 flex items-center gap-2"
+          >
+            <Share2 size={14} /> Partager
+          </button>
+          <div className="border-t border-gray-700 my-1" />
+          <button
+            onClick={() => { handleSingleFileDelete(contextMenu.file); setContextMenu(null); }}
+            className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-gray-800 flex items-center gap-2"
+          >
+            <Trash2 size={14} /> Supprimer
+          </button>
+        </div>
+      )}
+
+      {/* Toast notifications */}
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   );
 };
