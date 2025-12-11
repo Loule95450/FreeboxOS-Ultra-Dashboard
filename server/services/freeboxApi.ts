@@ -105,9 +105,9 @@ class FreeboxApiService {
 
     // Build full API URL
     private buildUrl(endpoint: string, apiVersion = config.freebox.apiVersion): string {
-        // WiFi uses v2 API
-        const version = endpoint.startsWith('/wifi') ? 'v2' : apiVersion;
-        return `${this.baseUrl}/api/${version}${endpoint}`;
+        // All endpoints use v15 now (the latest API version)
+        // WiFi was previously v2 but is now supported in v15
+        return `${this.baseUrl}/api/${apiVersion}${endpoint}`;
     }
 
     // Make HTTP request to Freebox
@@ -626,10 +626,40 @@ class FreeboxApiService {
     }
 
     async addDownload(downloadUrl: string, downloadDir?: string): Promise<FreeboxApiResponse> {
-        return this.request('POST', API_ENDPOINTS.DOWNLOADS_ADD, {
-            download_url: downloadUrl,
-            download_dir: downloadDir
-        });
+        // The Freebox API requires application/x-www-form-urlencoded for downloads/add
+        const url = this.buildUrl(API_ENDPOINTS.DOWNLOADS_ADD);
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        };
+
+        if (this.sessionToken) {
+            headers['X-Fbx-App-Auth'] = this.sessionToken;
+        }
+
+        const params = new URLSearchParams();
+        params.append('download_url', downloadUrl);
+        if (downloadDir) {
+            params.append('download_dir', downloadDir);
+        }
+
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), config.freebox.requestTimeout);
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers,
+                body: params.toString(),
+                signal: controller.signal
+            });
+            clearTimeout(timeout);
+
+            const data = await response.json() as FreeboxApiResponse;
+            return data;
+        } catch (error) {
+            console.error('[FreeboxAPI] addDownload error:', error);
+            return { success: false, error_code: 'request_failed', msg: String(error) };
+        }
     }
 
     async addDownloadFromFile(fileBuffer: Buffer, filename: string, downloadDir?: string): Promise<FreeboxApiResponse> {

@@ -76,6 +76,12 @@ export const API_ROUTES = {
   WIFI_PLANNING: '/api/wifi/planning',
   WIFI_MAC_FILTER: '/api/wifi/mac-filter',
   WIFI_WPS: '/api/wifi/wps',
+  // WiFi v13+ features
+  WIFI_TEMP_DISABLE: '/api/wifi/temp-disable',
+  // WiFi v14+ features
+  WIFI_GUEST_CONFIG: '/api/wifi/guest/config',
+  WIFI_GUEST_KEYS: '/api/wifi/guest/keys',
+  WIFI_MLO_CONFIG: '/api/wifi/mlo/config',
 
   // LAN
   LAN_CONFIG: '/api/lan/config',

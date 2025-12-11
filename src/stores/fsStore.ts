@@ -53,6 +53,11 @@ interface FsState {
   files: FsFile[];
   currentPath: string;
 
+  // v15 Pagination
+  cursor: string | null;
+  hasMore: boolean;
+  isLoadingMore: boolean;
+
   // Storage info
   storage: StorageInfo | null;
   disks: DiskInfo[];
@@ -66,7 +71,8 @@ interface FsState {
   selectedFiles: string[];
 
   // Actions
-  listFiles: (path?: string) => Promise<void>;
+  listFiles: (path?: string, reset?: boolean) => Promise<void>;
+  loadMore: () => Promise<void>;
   navigateTo: (path: string) => Promise<void>;
   navigateUp: () => Promise<void>;
   getFileInfo: (path: string) => Promise<FsFile | null>;
@@ -88,9 +94,18 @@ interface FsState {
   deleteShareLink: (token: string) => Promise<boolean>;
 }
 
+// Response type for v15 API (with pagination)
+interface FsListResponse {
+  entries?: FsFile[];
+  cursor?: string;
+}
+
 export const useFsStore = create<FsState>((set, get) => ({
   files: [],
   currentPath: '/',
+  cursor: null,
+  hasMore: false,
+  isLoadingMore: false,
   storage: null,
   disks: [],
   shareLinks: [],
@@ -98,34 +113,106 @@ export const useFsStore = create<FsState>((set, get) => ({
   error: null,
   selectedFiles: [],
 
-  listFiles: async (path?: string) => {
+  listFiles: async (path?: string, reset = true) => {
     const targetPath = path ?? get().currentPath;
-    set({ isLoading: true, error: null });
+    const { cursor: currentCursor } = get();
+
+    // If reset, start fresh. Otherwise, use cursor for pagination
+    if (reset) {
+      set({ isLoading: true, error: null, cursor: null, hasMore: false });
+    } else {
+      set({ isLoadingMore: true });
+    }
 
     try {
-      // For root path, don't send any path parameter
-      // For other paths, send the base64-encoded path as-is (returned by Freebox API)
-      const url = (targetPath === '/' || targetPath === '')
-        ? `${API_ROUTES.FS}/list`
-        : `${API_ROUTES.FS}/list?path=${encodeURIComponent(targetPath)}`;
+      // Build URL with optional path and cursor
+      let url = `${API_ROUTES.FS}/list`;
+      const params: string[] = [];
 
-      const response = await api.get<FsFile[]>(url);
+      if (targetPath !== '/' && targetPath !== '') {
+        params.push(`path=${encodeURIComponent(targetPath)}`);
+      }
+
+      // Add cursor for pagination (v15+)
+      if (!reset && currentCursor) {
+        params.push(`cursor=${encodeURIComponent(currentCursor)}`);
+      }
+
+      if (params.length > 0) {
+        url += '?' + params.join('&');
+      }
+
+      // Response can be either array (old format) or object with entries/cursor (v15)
+      const response = await api.get<FsFile[] | FsListResponse>(url);
+
       if (response.success && response.result) {
+        let files: FsFile[];
+        let newCursor: string | null = null;
+
+        // Handle both v15 format (object with entries) and legacy format (array)
+        if (Array.isArray(response.result)) {
+          files = response.result;
+        } else {
+          files = response.result.entries || [];
+          newCursor = response.result.cursor || null;
+        }
+
         // Sort: directories first, then by name
-        const sorted = [...response.result].sort((a, b) => {
+        const sorted = [...files].sort((a, b) => {
           if (a.type === 'dir' && b.type !== 'dir') return -1;
           if (a.type !== 'dir' && b.type === 'dir') return 1;
           return a.name.localeCompare(b.name);
         });
-        set({ files: sorted, currentPath: targetPath, isLoading: false, selectedFiles: [] });
+
+        if (reset) {
+          set({
+            files: sorted,
+            currentPath: targetPath,
+            cursor: newCursor,
+            hasMore: !!newCursor,
+            isLoading: false,
+            selectedFiles: []
+          });
+        } else {
+          // Append to existing files
+          const existingFiles = get().files;
+          set({
+            files: [...existingFiles, ...sorted],
+            cursor: newCursor,
+            hasMore: !!newCursor,
+            isLoadingMore: false
+          });
+        }
       } else {
         // No disk or no access - just show empty list without error
-        set({ files: [], currentPath: targetPath, isLoading: false, error: null });
+        set({
+          files: reset ? [] : get().files,
+          currentPath: targetPath,
+          cursor: null,
+          hasMore: false,
+          isLoading: false,
+          isLoadingMore: false,
+          error: null
+        });
       }
     } catch {
       // Silently fail - show empty directory if no disk
-      set({ files: [], currentPath: targetPath, isLoading: false, error: null });
+      set({
+        files: reset ? [] : get().files,
+        currentPath: targetPath,
+        cursor: null,
+        hasMore: false,
+        isLoading: false,
+        isLoadingMore: false,
+        error: null
+      });
     }
+  },
+
+  loadMore: async () => {
+    const { hasMore, isLoadingMore, currentPath } = get();
+    if (!hasMore || isLoadingMore) return;
+    await get().listFiles(currentPath, false);
   },
 
   navigateTo: async (path: string) => {

@@ -493,10 +493,13 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
     currentPath,
     disks,
     isLoading,
+    isLoadingMore,
+    hasMore,
     error,
     selectedFiles,
     shareLinks,
     listFiles,
+    loadMore,
     navigateTo,
     navigateUp,
     createDirectory,
@@ -1292,30 +1295,55 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                 <Loader2 size={32} className="text-blue-400 animate-spin" />
               </div>
             ) : filteredFiles.length > 0 ? (
-              <div className={viewMode === 'grid'
-                ? 'grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3'
-                : 'space-y-1'
-              }>
-                {filteredFiles.map((file) => (
-                  <FileItem
-                    key={file.path}
-                    file={file}
-                    isSelected={selectedFiles.includes(file.path)}
-                    isShared={isFileShared(file.path)}
-                    isRootFolder={isRootLevelFolder(file.path)}
-                    isParentDir={file.name === '..'}
-                    viewMode={viewMode}
-                    onSelect={() => toggleSelectFile(file.path)}
-                    onOpen={() => handleOpen(file)}
-                    onContextMenu={(e) => handleContextMenu(e, file)}
-                    onRename={() => handleSingleFileRename(file)}
-                    onCopy={() => handleSingleFileCopy(file)}
-                    onMove={() => handleSingleFileMove(file)}
-                    onShare={() => handleSingleFileShare(file)}
-                    onDelete={() => handleSingleFileDelete(file)}
-                  />
-                ))}
-              </div>
+              <>
+                <div className={viewMode === 'grid'
+                  ? 'grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3'
+                  : 'space-y-1'
+                }>
+                  {filteredFiles.map((file) => (
+                    <FileItem
+                      key={file.path}
+                      file={file}
+                      isSelected={selectedFiles.includes(file.path)}
+                      isShared={isFileShared(file.path)}
+                      isRootFolder={isRootLevelFolder(file.path)}
+                      isParentDir={file.name === '..'}
+                      viewMode={viewMode}
+                      onSelect={() => toggleSelectFile(file.path)}
+                      onOpen={() => handleOpen(file)}
+                      onContextMenu={(e) => handleContextMenu(e, file)}
+                      onRename={() => handleSingleFileRename(file)}
+                      onCopy={() => handleSingleFileCopy(file)}
+                      onMove={() => handleSingleFileMove(file)}
+                      onShare={() => handleSingleFileShare(file)}
+                      onDelete={() => handleSingleFileDelete(file)}
+                    />
+                  ))}
+                </div>
+
+                {/* Load More button for v15 pagination */}
+                {hasMore && (
+                  <div className="flex justify-center mt-6">
+                    <button
+                      onClick={loadMore}
+                      disabled={isLoadingMore}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-[#1a1a1a] hover:bg-[#252525] disabled:opacity-50 border border-gray-700 rounded-lg transition-colors text-sm text-white"
+                    >
+                      {isLoadingMore ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          Chargement...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw size={16} />
+                          Charger plus de fichiers
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center py-16">
                 <Folder size={48} className="text-gray-600 mb-4" />
