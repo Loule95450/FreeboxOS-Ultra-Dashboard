@@ -483,9 +483,11 @@ const DownloadItem: React.FC<{
 
 interface FilesPageProps {
   onBack: () => void;
+  initialTab?: 'files' | 'downloads' | 'shares';
+  initialDownloadId?: string;
 }
 
-export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
+export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initialDownloadId }) => {
   const {
     files,
     currentPath,
@@ -530,7 +532,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
   const { info: systemInfo } = useSystemStore();
   const boxName = getDisplayName(systemInfo?.board_name || '');
 
-  const [activeTab, setActiveTab] = useState<'files' | 'downloads' | 'shares'>('files');
+  const [activeTab, setActiveTab] = useState<'files' | 'downloads' | 'shares'>(initialTab || 'files');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
@@ -594,6 +596,16 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
     // Always try to list files on mount - the API will handle errors gracefully
     listFiles('/');
   }, [fetchDisks, fetchDownloads, fetchShareLinks, listFiles]);
+
+  // Select initial download when downloads are loaded
+  useEffect(() => {
+    if (initialDownloadId && downloads.length > 0 && !selectedDownload) {
+      const download = downloads.find(d => d.id === initialDownloadId);
+      if (download) {
+        setSelectedDownload(download);
+      }
+    }
+  }, [initialDownloadId, downloads, selectedDownload]);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -1361,10 +1373,11 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack }) => {
                     onRetry={() => handleRetryDownload(task.id)}
                     onDelete={() => {
                       if (confirm('Supprimer ce téléchargement ?')) {
-                        deleteDownload(task.id, false);
+                        // Close details panel first if this is the selected download
                         if (selectedDownload?.id === task.id) {
                           setSelectedDownload(null);
                         }
+                        deleteDownload(task.id, false);
                       }
                     }}
                   />
