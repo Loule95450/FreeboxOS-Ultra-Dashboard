@@ -3,8 +3,8 @@
 # Multi-stage build for production deployment
 # ===========================================
 
-# Stage 1: Build frontend
-FROM node:20-alpine AS builder
+# Stage 1: Build frontend (native platform for speed)
+FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ COPY . .
 # Build frontend (Vite)
 RUN npm run build
 
-# Stage 2: Production image
+# Stage 2: Production image (target platform)
 FROM node:20-alpine AS production
 
 # Security: Create non-root user
@@ -30,9 +30,10 @@ WORKDIR /app
 # Create data directory for persistent token storage
 RUN mkdir -p /app/data && chown -R freebox:nodejs /app/data
 
-# Copy package files and install dependencies (tsx needed for runtime)
+# Copy package files and install production dependencies only
+# Using --ignore-scripts to avoid native compilation issues with QEMU
 COPY --chown=freebox:nodejs package*.json ./
-RUN npm ci && npm cache clean --force
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 # Copy built frontend from builder
 COPY --chown=freebox:nodejs --from=builder /app/dist ./dist
