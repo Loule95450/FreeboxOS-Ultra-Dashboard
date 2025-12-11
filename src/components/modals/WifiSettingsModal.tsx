@@ -97,9 +97,13 @@ export const WifiSettingsModal: React.FC<WifiSettingsModalProps> = ({
   const { permissions, freeboxUrl } = useAuthStore();
   const hasSettingsPermission = permissions.settings === true;
 
-  // Get system info to check model (MLO only available on Ultra)
+  // Get system info to check model (MLO only available on Ultra/v9)
   const { info: systemInfo } = useSystemStore();
-  const isUltraModel = systemInfo?.model_info?.name === 'ultra' || systemInfo?.board_name?.toLowerCase().includes('ultra');
+  // Ultra is fbxgw9 (v9) - check board_name (fbxgw9r) or box_model_name (Freebox v9)
+  const isUltraModel =
+    systemInfo?.board_name?.toLowerCase().includes('fbxgw9') ||
+    systemInfo?.box_model_name?.toLowerCase().includes('v9') ||
+    systemInfo?.box_model_name?.toLowerCase().includes('ultra');
 
   // Get WiFi store for v13/v14 features
   const {
